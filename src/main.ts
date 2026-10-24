@@ -12,6 +12,14 @@ import { convertToSongTimeline } from './core/noteblock-mapper';
 import { exportSpongeSchematic } from './core/schem-exporter';
 import { exportLitematic } from './core/litematic-exporter';
 import { WebAudioNoteBlockPlayer } from './core/audio-preview';
+import { buildCircuitGrid, type GeneratedCircuit } from './core/circuit-builder';
+import {
+  computeMaterialList,
+  SchematicCanvasRenderer,
+  type MaterialListReport,
+  type PreviewLayer,
+  type HoveredCellInfo,
+} from './core/schematic-viewer';
 import {
   MINECRAFT_INSTRUMENTS,
   type MidiFile,
@@ -27,6 +35,10 @@ export const APP_VERSION = '1.0.0';
 // Global Application State
 let currentMidi: MidiFile | null = null;
 let currentTimeline: SongTimeline | null = null;
+let currentCircuit: GeneratedCircuit | null = null;
+let currentMaterialReport: MaterialListReport | null = null;
+let schematicRenderer: SchematicCanvasRenderer | null = null;
+let currentPreviewLayer: PreviewLayer = 'circuit';
 let currentExportName = 'Ode_to_Joy';
 const audioPlayer = new WebAudioNoteBlockPlayer();
 
@@ -85,6 +97,19 @@ export async function loadMidiBuffer(buffer: ArrayBuffer | Uint8Array, fileName 
   }
 }
 
+function recomputeCircuit(): void {
+  if (!currentTimeline) {
+    currentCircuit = null;
+    currentMaterialReport = null;
+    return;
+  }
+  currentCircuit = buildCircuitGrid(currentTimeline, {
+    name: currentExportName,
+    maxTrackWidth,
+  });
+  currentMaterialReport = computeMaterialList(currentCircuit, currentExportName);
+}
+
 function recomputeTimeline(): void {
   if (!currentMidi) return;
   currentTimeline = convertToSongTimeline(currentMidi, conversionOptions);
@@ -94,6 +119,7 @@ function recomputeTimeline(): void {
     currentExportName = currentTimeline.title;
   }
   audioPlayer.loadSong(currentTimeline);
+  recomputeCircuit();
 }
 
 /**
@@ -293,7 +319,10 @@ export function renderApp(): void {
 
             <div class="settings-stack">
               <div class="setting-row">
-                <label for="transposeInput">Pitch Transposition (semitones)</label>
+                <div class="setting-label-group">
+                  <label for="transposeInput">Pitch Transposition (semitones)</label>
+                  <span class="setting-hint">Shift song pitch into optimal Note Block 2-octave range [0, 24].</span>
+                </div>
                 <input
                   type="number"
                   id="transposeInput"
@@ -304,7 +333,10 @@ export function renderApp(): void {
               </div>
 
               <div class="setting-row">
-                <label for="widthInput">Max Track Width (blocks)</label>
+                <div class="setting-label-group">
+                  <label for="widthInput">Max Track Width (blocks)</label>
+                  <span class="setting-hint">Limits contraption width (X axis) before turning into the next serpentine row (default 16 = 1 chunk). Lower values make narrow/long tracks; higher values create wider tracks with fewer turns.</span>
+                </div>
                 <input
                   type="number"
                   id="widthInput"
@@ -373,6 +405,84 @@ export function renderApp(): void {
             </div>
           </section>
         </div>
+
+        <!-- Schematic Preview Section -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Schematic Circuit Preview</div>
+              <div class="panel-subtitle">Interactive 2D top-down view of generated redstone wiring, repeaters, and note blocks</div>
+            </div>
+            ${currentCircuit ? `
+              <div class="schematic-header-badges">
+                <span class="badge-dim">${currentCircuit.dimensions.width}W × ${currentCircuit.dimensions.height}H × ${currentCircuit.dimensions.length}L blocks</span>
+                <span class="badge-dim">${currentCircuit.dimensions.width * currentCircuit.dimensions.length} m² footprint</span>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="preview-toolbar">
+            <div class="preview-layer-group">
+              <button id="btnLayerCircuit" class="btn btn-sm ${currentPreviewLayer === 'circuit' ? 'btn-primary' : 'btn-subtle'}">
+                Circuit (Y=1)
+              </button>
+              <button id="btnLayerSubstrate" class="btn btn-sm ${currentPreviewLayer === 'substrate' ? 'btn-primary' : 'btn-subtle'}">
+                Substrates (Y=0)
+              </button>
+            </div>
+
+            <div class="preview-zoom-group">
+              <button id="btnZoomOut" class="btn btn-subtle btn-sm" title="Zoom Out">&minus; Zoom</button>
+              <button id="btnZoomReset" class="btn btn-subtle btn-sm" title="Fit to Container">Fit</button>
+              <button id="btnZoomIn" class="btn btn-subtle btn-sm" title="Zoom In">&plus; Zoom</button>
+            </div>
+          </div>
+
+          <div class="schematic-canvas-container">
+            <canvas id="schematicCanvas"></canvas>
+          </div>
+
+          <div id="blockInspector" class="block-inspector-bar">
+            <span class="inspector-hint">Hover over any block in the preview above to inspect coordinates, instrument, note pitch, or repeater delay.</span>
+          </div>
+        </section>
+
+        <!-- Material Checklist Section -->
+        ${currentMaterialReport ? `
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Survival Material Checklist</div>
+                <div class="panel-subtitle">Exact blocks required to build this schematic in vanilla Minecraft survival</div>
+              </div>
+              <button id="btnCopyMaterials" class="btn btn-subtle btn-sm">
+                📋 Copy Material List
+              </button>
+            </div>
+
+            <div class="materials-grid">
+              ${currentMaterialReport.categories.map((cat) => `
+                <div class="material-category-card">
+                  <div class="material-cat-title">${cat.title}</div>
+                  <div class="material-items-list">
+                    ${cat.items.map((item) => `
+                      <div class="material-row">
+                        <div class="material-name-col">
+                          <span class="material-name">${item.name}</span>
+                          ${item.instrumentName ? `<span class="material-inst-tag">${item.instrumentName}</span>` : ''}
+                        </div>
+                        <div class="material-count-col">
+                          <strong class="material-total">${item.count}</strong>
+                          <span class="material-stacks">(${item.stacksText})</span>
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </section>
+        ` : ''}
 
         <!-- Export Section -->
         <section class="panel">
@@ -447,6 +557,71 @@ export function renderApp(): void {
   if (canvas) {
     setupVisualizer(canvas);
   }
+
+  const schemCanvas = document.getElementById('schematicCanvas') as HTMLCanvasElement | null;
+  if (schemCanvas && currentCircuit) {
+    setupSchematicPreview(schemCanvas);
+  }
+}
+
+/**
+ * Initializes the interactive schematic canvas previewer.
+ */
+function setupSchematicPreview(canvas: HTMLCanvasElement): void {
+  if (!currentCircuit) return;
+  const inspector = document.getElementById('blockInspector');
+
+  schematicRenderer = new SchematicCanvasRenderer(canvas, {
+    onHover: (info: HoveredCellInfo | null) => {
+      if (!inspector) return;
+      if (!info || info.category === 'air') {
+        inspector.innerHTML = `<span class="inspector-hint">Hover over any block in the preview above to inspect coordinates, instrument, note pitch, or repeater delay.</span>`;
+        return;
+      }
+
+      let detailHtml = '';
+      if (info.category === 'noteblock') {
+        detailHtml = `
+          <span class="inspector-badge inspector-badge-note">♪ ${info.instrument}</span>
+          <span class="inspector-item">Pitch: <strong>${info.note} (${info.noteName})</strong></span>
+          ${info.substrateName ? `<span class="inspector-item">Substrate: <strong>${info.substrateName}</strong></span>` : ''}
+        `;
+      } else if (info.category === 'repeater') {
+        detailHtml = `
+          <span class="inspector-badge inspector-badge-rep">⚡ Repeater</span>
+          <span class="inspector-item">Delay: <strong>${info.delay}t (${(info.delay! * 0.1).toFixed(1)}s)</strong></span>
+          <span class="inspector-item">Output: <strong>${info.facing === 'west' ? 'East (→)' : info.facing === 'east' ? 'West (←)' : info.facing}</strong></span>
+        `;
+      } else if (info.category === 'wire') {
+        detailHtml = `
+          <span class="inspector-badge inspector-badge-wire">Redstone Wire</span>
+          <span class="inspector-item">Conductive spine & turns</span>
+        `;
+      } else if (info.category === 'foundation') {
+        detailHtml = `
+          <span class="inspector-badge">Foundation Stone</span>
+          <span class="inspector-item">Solid circuit base</span>
+        `;
+      } else {
+        detailHtml = `
+          <span class="inspector-badge">${info.blockName}</span>
+          <span class="inspector-item">Base substrate block</span>
+        `;
+      }
+
+      inspector.innerHTML = `
+        <div class="inspector-coord">
+          <strong>X:</strong> ${info.x} &bull; <strong>Y:</strong> ${info.y} &bull; <strong>Z:</strong> ${info.z}
+        </div>
+        <div class="inspector-details">
+          ${detailHtml}
+        </div>
+      `;
+    },
+  });
+
+  schematicRenderer.setCircuit(currentCircuit);
+  schematicRenderer.setLayer(currentPreviewLayer);
 }
 
 /**
@@ -552,6 +727,7 @@ function attachEventListeners(): void {
   if (widthInput) {
     widthInput.addEventListener('change', () => {
       maxTrackWidth = Math.max(5, Math.min(32, parseInt(widthInput.value, 10) || 16));
+      recomputeCircuit();
       renderApp();
     });
   }
@@ -569,6 +745,68 @@ function attachEventListeners(): void {
       conversionOptions.enableOctaveFolding = octaveFoldCheck.checked;
       recomputeTimeline();
       renderApp();
+    });
+  }
+
+  // Schematic Preview Controls
+  const btnLayerCircuit = document.getElementById('btnLayerCircuit');
+  const btnLayerSubstrate = document.getElementById('btnLayerSubstrate');
+  const btnZoomIn = document.getElementById('btnZoomIn');
+  const btnZoomOut = document.getElementById('btnZoomOut');
+  const btnZoomReset = document.getElementById('btnZoomReset');
+
+  if (btnLayerCircuit && btnLayerSubstrate) {
+    btnLayerCircuit.addEventListener('click', () => {
+      currentPreviewLayer = 'circuit';
+      btnLayerCircuit.classList.add('btn-primary');
+      btnLayerCircuit.classList.remove('btn-subtle');
+      btnLayerSubstrate.classList.remove('btn-primary');
+      btnLayerSubstrate.classList.add('btn-subtle');
+      schematicRenderer?.setLayer('circuit');
+    });
+
+    btnLayerSubstrate.addEventListener('click', () => {
+      currentPreviewLayer = 'substrate';
+      btnLayerSubstrate.classList.add('btn-primary');
+      btnLayerSubstrate.classList.remove('btn-subtle');
+      btnLayerCircuit.classList.remove('btn-primary');
+      btnLayerCircuit.classList.add('btn-subtle');
+      schematicRenderer?.setLayer('substrate');
+    });
+  }
+
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener('click', () => schematicRenderer?.setZoom(4));
+  }
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener('click', () => schematicRenderer?.setZoom(-4));
+  }
+  if (btnZoomReset) {
+    btnZoomReset.addEventListener('click', () => schematicRenderer?.resetZoom());
+  }
+
+  // Copy Materials Checklist
+  const btnCopyMaterials = document.getElementById('btnCopyMaterials');
+  if (btnCopyMaterials && currentMaterialReport) {
+    btnCopyMaterials.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(currentMaterialReport!.copyableText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = currentMaterialReport!.copyableText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        btnCopyMaterials.textContent = '✓ Copied to Clipboard!';
+        setTimeout(() => {
+          btnCopyMaterials.textContent = '📋 Copy Material List';
+        }, 2000);
+      } catch (err) {
+        alert('Could not copy to clipboard: ' + String(err));
+      }
     });
   }
 
@@ -663,6 +901,8 @@ audioPlayer.onTick((state: AudioPlayerState) => {
   if (seekSlider && document.activeElement !== seekSlider) {
     seekSlider.value = state.currentTime.toString();
   }
+
+  schematicRenderer?.setActiveTick(state.currentRedstoneTick);
 });
 
 audioPlayer.onEnded(() => {
