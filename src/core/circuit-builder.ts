@@ -162,6 +162,23 @@ export function buildCircuitGrid(
     // Now place note blocks for this tick
     if (events.length > 0) {
       for (let chordIdx = 0; chordIdx < events.length; chordIdx += 3) {
+        // If there are > 3 simultaneous notes at this tick, place a 1-tick repeater before the next note cluster
+        // to guarantee that note blocks are NEVER placed after each other along the transmission track!
+        if (chordIdx > 0) {
+          advancePosition();
+          const z = getLaneZ(laneIndex);
+          const facing: RepeaterFacing = dirX === 1 ? 'east' : 'west';
+          setBlock(
+            curX,
+            1,
+            z,
+            `minecraft:repeater[delay=1,facing=${facing},powered=false]`
+          );
+          setBlock(curX, 0, z, 'minecraft:stone');
+          setBlock(curX, 2, z, 'minecraft:air');
+          totalRepeaters++;
+        }
+
         advancePosition();
         const centerZ = getLaneZ(laneIndex);
 
@@ -178,7 +195,7 @@ export function buildCircuitGrid(
         setBlock(curX, 2, centerZ, 'minecraft:air');
         totalNoteBlocks++;
 
-        // Second note placed on North flank (Z - 1)
+        // Max 1 chord note to North flank (Z - 1)
         if (chordIdx + 1 < events.length) {
           const ev1 = events[chordIdx + 1]!;
           setBlock(
@@ -192,7 +209,7 @@ export function buildCircuitGrid(
           totalNoteBlocks++;
         }
 
-        // Third note placed on South flank (Z + 1)
+        // Max 1 chord note to South flank (Z + 1)
         if (chordIdx + 2 < events.length) {
           const ev2 = events[chordIdx + 2]!;
           setBlock(
