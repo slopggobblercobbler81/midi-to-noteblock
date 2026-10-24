@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Production build artifacts
+dist/
+
+# Test coverage
+coverage/
+
+# Vite cache & temp
+.vite/
+
+# Local env files
+*.local
+.env
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Internal Agent Workspaces & Cache
+.agents/
