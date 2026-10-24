@@ -512,6 +512,10 @@ export class TempoMap {
   public readonly entries: TempoChange[];
   public readonly points: TempoChange[];
   public readonly ppq: number;
+  private readonly ticksArr: Int32Array;
+  private readonly secondsArr: Float64Array;
+  private readonly microsArr: Float64Array;
+  private readonly ppqMillion: number;
 
   constructor(
     arg1: number | Array<{ tick: number; microsecondsPerQuarter: number }>,
@@ -529,6 +533,7 @@ export class TempoMap {
     }
 
     this.ppq = rawPpq > 0 ? rawPpq : DEFAULT_TICKS_PER_QUARTER;
+    this.ppqMillion = this.ppq * 1_000_000;
 
     // 1. Sort raw tempo events by tick ascending (stable sort preserves file order)
     const sorted = [...rawTempoChanges].sort((a, b) => a.tick - b.tick);
@@ -581,6 +586,18 @@ export class TempoMap {
     }
 
     this.points = this.entries;
+
+    const len = this.entries.length;
+    this.ticksArr = new Int32Array(len);
+    this.secondsArr = new Float64Array(len);
+    this.microsArr = new Float64Array(len);
+
+    for (let i = 0; i < len; i++) {
+      const e = this.entries[i]!;
+      this.ticksArr[i] = e.tick;
+      this.secondsArr[i] = e.seconds;
+      this.microsArr[i] = e.microsecondsPerQuarter;
+    }
   }
 
   /**
@@ -597,26 +614,23 @@ export class TempoMap {
   public tickToSeconds(tick: number): number {
     if (tick <= 0) return 0.0;
 
+    const ticks = this.ticksArr;
     let low = 0;
-    let high = this.entries.length - 1;
+    let high = ticks.length - 1;
     let k = 0;
 
     while (low <= high) {
       const mid = (low + high) >>> 1;
-      const entry = this.entries[mid];
-      if (entry && entry.tick <= tick) {
+      if (ticks[mid]! <= tick) {
         k = mid;
-        low = mid + 1; // Seek rightmost transition <= tick
+        low = mid + 1;
       } else {
         high = mid - 1;
       }
     }
 
-    const entry = this.entries[k] ?? this.entries[0];
-    if (!entry) return 0.0;
-
-    const deltaTicks = tick - entry.tick;
-    return entry.seconds + (deltaTicks * entry.microsecondsPerQuarter) / (this.ppq * 1_000_000);
+    const deltaTicks = tick - ticks[k]!;
+    return this.secondsArr[k]! + (deltaTicks * this.microsArr[k]!) / this.ppqMillion;
   }
 
   /**
@@ -626,14 +640,14 @@ export class TempoMap {
   public secondsToTick(seconds: number): number {
     if (seconds <= 0) return 0;
 
+    const secArr = this.secondsArr;
     let low = 0;
-    let high = this.entries.length - 1;
+    let high = secArr.length - 1;
     let k = 0;
 
     while (low <= high) {
       const mid = (low + high) >>> 1;
-      const entry = this.entries[mid];
-      if (entry && entry.seconds <= seconds) {
+      if (secArr[mid]! <= seconds) {
         k = mid;
         low = mid + 1;
       } else {
@@ -641,12 +655,9 @@ export class TempoMap {
       }
     }
 
-    const entry = this.entries[k] ?? this.entries[0];
-    if (!entry) return 0;
-
-    const deltaSeconds = seconds - entry.seconds;
-    const deltaTicks = (deltaSeconds * this.ppq * 1_000_000) / entry.microsecondsPerQuarter;
-    return Math.round(entry.tick + deltaTicks);
+    const deltaSeconds = seconds - secArr[k]!;
+    const deltaTicks = (deltaSeconds * this.ppqMillion) / this.microsArr[k]!;
+    return Math.round(this.ticksArr[k]! + deltaTicks);
   }
 
   /**
