@@ -27,6 +27,7 @@ export const APP_VERSION = '1.0.0';
 // Global Application State
 let currentMidi: MidiFile | null = null;
 let currentTimeline: SongTimeline | null = null;
+let currentExportName = 'Ode_to_Joy';
 const audioPlayer = new WebAudioNoteBlockPlayer();
 
 const conversionOptions: ConversionOptions = {
@@ -67,8 +68,13 @@ function formatTime(seconds: number): string {
 export async function loadMidiBuffer(buffer: ArrayBuffer | Uint8Array, fileName = 'song.mid'): Promise<void> {
   try {
     currentMidi = parseMidi(buffer);
-    if (!currentMidi.tracks.some((t) => t.name) && fileName) {
-      currentMidi.tracks[0]!.name = fileName.replace(/\.[^/.]+$/, '');
+
+    const baseName = fileName ? fileName.replace(/\.[^/.]+$/, '').trim() : '';
+    if (baseName) {
+      currentExportName = baseName.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim() || 'noteblock_song';
+      conversionOptions.songTitle = currentExportName;
+    } else {
+      conversionOptions.songTitle = undefined;
     }
 
     conversionOptions.instrumentOverrides = {};
@@ -82,6 +88,11 @@ export async function loadMidiBuffer(buffer: ArrayBuffer | Uint8Array, fileName 
 function recomputeTimeline(): void {
   if (!currentMidi) return;
   currentTimeline = convertToSongTimeline(currentMidi, conversionOptions);
+  if (currentExportName && currentExportName !== 'noteblock_song') {
+    currentTimeline.title = currentExportName;
+  } else if (currentTimeline.title && currentTimeline.title !== 'Minecraft Note Block Song') {
+    currentExportName = currentTimeline.title;
+  }
   audioPlayer.loadSong(currentTimeline);
 }
 
@@ -389,6 +400,18 @@ export function renderApp(): void {
             </div>
           </div>
 
+          <div class="schematic-naming-row">
+            <label for="schematicNameInput" class="schematic-name-label">File Name:</label>
+            <input
+              type="text"
+              id="schematicNameInput"
+              class="schematic-name-input"
+              value="${currentExportName}"
+              placeholder="e.g. my_song"
+            />
+            <span class="schematic-ext-hint">(.schem / .litematic)</span>
+          </div>
+
           <div class="export-actions">
             <button id="btnExportSchem" class="btn btn-primary export-btn">
               Download Sponge (.schem) &mdash; WorldEdit 1.13+
@@ -583,14 +606,30 @@ function attachEventListeners(): void {
     });
   });
 
-  // Export Buttons
+  // Export Buttons & Filename input
   const btnExportSchem = document.getElementById('btnExportSchem');
   const btnExportLitematic = document.getElementById('btnExportLitematic');
+  const schematicNameInput = document.getElementById('schematicNameInput') as HTMLInputElement | null;
+
+  if (schematicNameInput) {
+    schematicNameInput.addEventListener('input', () => {
+      const val = schematicNameInput.value.trim();
+      if (val) {
+        currentExportName = val;
+      }
+    });
+  }
+
+  const getCleanExportName = () => {
+    const raw = schematicNameInput?.value.trim() || currentExportName || currentTimeline?.title || 'noteblock_song';
+    return raw.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim() || 'noteblock_song';
+  };
 
   if (btnExportSchem && currentTimeline) {
     btnExportSchem.addEventListener('click', async () => {
+      const exportName = getCleanExportName();
       const result = await exportSpongeSchematic(currentTimeline!, {
-        name: currentTimeline!.title,
+        name: exportName,
         maxTrackWidth,
       });
       triggerBrowserDownload(result.filename, result.mimeType, result.data);
@@ -599,8 +638,9 @@ function attachEventListeners(): void {
 
   if (btnExportLitematic && currentTimeline) {
     btnExportLitematic.addEventListener('click', async () => {
+      const exportName = getCleanExportName();
       const result = await exportLitematic(currentTimeline!, {
-        name: currentTimeline!.title,
+        name: exportName,
         maxTrackWidth,
       });
       triggerBrowserDownload(result.filename, result.mimeType, result.data);

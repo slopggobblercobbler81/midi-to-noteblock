@@ -576,12 +576,42 @@ export function convertToSongTimeline(
   options?: ConversionOptions
 ): SongTimeline {
   // 1. Identify primary title & tempo
-  let title = 'Minecraft Note Block Song';
-  for (const track of midi.tracks) {
-    if (track.name && track.name.trim().length > 0 && track.name !== 'Track 0') {
-      title = track.name.trim();
-      break;
+  let title = options?.songTitle?.trim() || '';
+
+  if (!title) {
+    // If Track 0 has a sequence/track name (Standard MIDI convention for song title)
+    if (midi.tracks[0]?.name && midi.tracks[0].name.trim().length > 0 && !/^track\s*\d+$/i.test(midi.tracks[0].name.trim())) {
+      title = midi.tracks[0].name.trim();
+    } else {
+      // Common DAW / GM instrument names to avoid using as overall song title
+      const genericInstrumentNames = new Set([
+        'piano', 'acoustic grand piano', 'bright acoustic piano', 'electric grand piano',
+        'honky-tonk piano', 'electric piano', 'electric piano 1', 'electric piano 2',
+        'harpsichord', 'clavinet', 'celesta', 'glockenspiel', 'music box', 'vibraphone',
+        'marimba', 'xylophone', 'tubular bells', 'dulcimer', 'drawbar organ', 'percussive organ',
+        'rock organ', 'church organ', 'reed organ', 'accordion', 'harmonica', 'tango accordion',
+        'acoustic guitar', 'electric guitar', 'acoustic bass', 'electric bass', 'synth bass',
+        'violin', 'viola', 'cello', 'contrabass', 'strings', 'string ensemble', 'synth strings',
+        'trumpet', 'trombone', 'tuba', 'french horn', 'brass section', 'soprano sax', 'alto sax',
+        'tenor sax', 'baritone sax', 'oboe', 'english horn', 'bassoon', 'clarinet', 'piccolo',
+        'flute', 'recorder', 'pan flute', 'lead', 'synth', 'pad', 'bass', 'drums', 'percussion',
+      ]);
+
+      for (const track of midi.tracks) {
+        if (track.name && track.name.trim().length > 0) {
+          const trimmed = track.name.trim();
+          const lower = trimmed.toLowerCase();
+          if (!genericInstrumentNames.has(lower) && !/^track\s*\d+$/i.test(lower)) {
+            title = trimmed;
+            break;
+          }
+        }
+      }
     }
+  }
+
+  if (!title) {
+    title = 'Minecraft Note Block Song';
   }
 
   const initialBpm = midi.tempoMap && midi.tempoMap.length > 0 ? midi.tempoMap[0]!.bpm : 120;

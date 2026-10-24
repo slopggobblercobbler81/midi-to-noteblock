@@ -46,4 +46,29 @@ describe('Public Domain Sample MIDI Conversion Test', () => {
     expect(litematicVal.isValid).toBe(true);
     expect(litematicVal.errors).toHaveLength(0);
   });
+
+  it('avoids naming the song after generic GM instruments like Electric Piano', () => {
+    const mockMidi = {
+      format: 1 as const,
+      numTracks: 2,
+      division: 480,
+      ticksPerQuarterNote: 480,
+      totalTicks: 4800,
+      durationSeconds: 10,
+      tempoMap: [{ absTick: 0, bpm: 120, microsecondsPerBeat: 500000, seconds: 0 }],
+      timeSignatures: [],
+      keySignatures: [],
+      tracks: [
+        { id: 0, name: '', channel: 0, isPercussion: false, notes: [] },
+        { id: 1, name: 'Electric Piano', channel: 0, isPercussion: false, notes: [{ pitch: 60, velocity: 80, startSeconds: 0, durationSeconds: 0.5, channel: 0 }] },
+      ],
+    };
+
+    const timeline = convertToSongTimeline(mockMidi as any);
+    expect(timeline.title).not.toBe('Electric Piano');
+
+    // When user provides a custom song title (e.g. from file name), it takes precedence
+    const customTimeline = convertToSongTimeline(mockMidi as any, { songTitle: 'custom_song' });
+    expect(customTimeline.title).toBe('custom_song');
+  });
 });

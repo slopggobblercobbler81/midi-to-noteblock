@@ -456,6 +456,11 @@ export interface ConversionOptions {
    * Per-track instrument overrides: Track ID -> MinecraftInstrument.
    */
   instrumentOverrides?: Record<number, MinecraftInstrument>;
+
+  /**
+   * Custom song or schematic title.
+   */
+  songTitle?: string;
 }
 
 // ============================================================================
