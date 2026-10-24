@@ -40,11 +40,11 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Run automated test suite
-        run: npm test
-
       - name: Build static site
         run: npm run build
+
+      - name: Run automated test suite
+        run: npm test
 
       - name: Upload GitHub Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
