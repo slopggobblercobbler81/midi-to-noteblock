@@ -134,25 +134,25 @@ describe('Schematic Viewer & Material List Test Suite', () => {
     const valSchem24 = validateSpongeSchematic(schem24.data);
     expect(valSchem24.isValid).toBe(true);
     expect(valSchem24.dimensions.width).toBe(24);
-    expect(valSchem24.dimensions.length).toBe(40);
+    expect(valSchem24.dimensions.length).toBe(37);
 
     const litematic24 = await exportLitematic(timeline, { name: 'Ode24', maxTrackWidth: 24 });
     const valLitematic24 = validateLitematic(litematic24.data);
     expect(valLitematic24.isValid).toBe(true);
     expect(valLitematic24.enclosingSize.x).toBe(24);
-    expect(valLitematic24.enclosingSize.z).toBe(40);
+    expect(valLitematic24.enclosingSize.z).toBe(37);
 
     // Export with custom width 10
     const schem10 = await exportSpongeSchematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
     const valSchem10 = validateSpongeSchematic(schem10.data);
     expect(valSchem10.isValid).toBe(true);
     expect(valSchem10.dimensions.width).toBe(10);
-    expect(valSchem10.dimensions.length).toBe(127);
+    expect(valSchem10.dimensions.length).toBe(115);
 
     const litematic10 = await exportLitematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
     const valLitematic10 = validateLitematic(litematic10.data);
     expect(valLitematic10.isValid).toBe(true);
     expect(valLitematic10.enclosingSize.x).toBe(10);
-    expect(valLitematic10.enclosingSize.z).toBe(127);
+    expect(valLitematic10.enclosingSize.z).toBe(115);
   });
 });

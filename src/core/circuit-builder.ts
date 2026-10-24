@@ -11,8 +11,7 @@
  * 3. Exact Redstone Timing: Delays between ticks are decomposed into 1-4 tick repeaters.
  * 4. Polyphonic Chords: Multiple simultaneous notes flank the redstone trigger node laterally.
  * 5. Track Width Constraint: Circuit width strictly <= maxTrackWidth.
- * 6. Signal Continuity: Redstone spine is 100% conductive (repeaters, stone, redstone wire).
- *    Note blocks NEVER sit on the transmission spine, ensuring signals never die.
+ * 6. Signal Continuity: Direct inline repeater -> note block -> repeater signal transmission.
  */
 
 import {
@@ -76,10 +75,10 @@ export function buildCircuitGrid(
 
   const getLaneZ = (lane: number) => 1 + lane * 3;
 
-  // Initial input repeater at (turnWestX, 1, 1) pointing East into the track.
-  // In Minecraft Java Edition: repeater facing defines the direction from output to input.
-  // To output East into the track (+X), facing must be 'west'.
-  setBlock(turnWestX, 1, 1, 'minecraft:repeater[delay=1,facing=west,powered=false]');
+  // Initial input repeater at (turnWestX, 1, 1) facing East into the track (+X).
+  // In Minecraft Java Edition: repeater facing defines the output direction.
+  // To output East into the track (+X), facing must be 'east'.
+  setBlock(turnWestX, 1, 1, 'minecraft:repeater[delay=1,facing=east,powered=false]');
   setBlock(turnWestX, 0, 1, 'minecraft:stone');
   setBlock(turnWestX, 2, 1, 'minecraft:air');
   totalRepeaters++;
@@ -143,10 +142,10 @@ export function buildCircuitGrid(
       for (const delay of repeaterDelays) {
         advancePosition();
         const z = getLaneZ(laneIndex);
-        // In Minecraft Java Edition: facing is from output to input.
-        // Signal traveling East (dirX === 1) -> facing: 'west'
-        // Signal traveling West (dirX === -1) -> facing: 'east'
-        const facing: RepeaterFacing = dirX === 1 ? 'west' : 'east';
+        // In Minecraft Java Edition: facing defines the output direction.
+        // Signal traveling East (dirX === 1) -> facing: 'east'
+        // Signal traveling West (dirX === -1) -> facing: 'west'
+        const facing: RepeaterFacing = dirX === 1 ? 'east' : 'west';
 
         setBlock(
           curX,
@@ -162,72 +161,47 @@ export function buildCircuitGrid(
 
     // Now place note blocks for this tick
     if (events.length > 0) {
-      advancePosition();
-      let centerZ = getLaneZ(laneIndex);
-
-      // Spine trigger node: redstone wire conducts seamlessly and powers flanking note blocks
-      setBlock(curX, 1, centerZ, 'minecraft:redstone_wire[power=0]');
-      setBlock(curX, 0, centerZ, 'minecraft:stone');
-      setBlock(curX, 2, centerZ, 'minecraft:air');
-
-      // First note placed on North flank (Z - 1)
-      const ev0 = events[0]!;
-      setBlock(
-        curX,
-        1,
-        centerZ - 1,
-        `minecraft:note_block[instrument=${ev0.instrument},note=${ev0.note},powered=false]`
-      );
-      setBlock(curX, 0, centerZ - 1, ev0.baseBlock);
-      setBlock(curX, 2, centerZ - 1, 'minecraft:air');
-      totalNoteBlocks++;
-
-      // Second note placed on South flank (Z + 1)
-      if (events.length > 1) {
-        const ev1 = events[1]!;
-        setBlock(
-          curX,
-          1,
-          centerZ + 1,
-          `minecraft:note_block[instrument=${ev1.instrument},note=${ev1.note},powered=false]`
-        );
-        setBlock(curX, 0, centerZ + 1, ev1.baseBlock);
-        setBlock(curX, 2, centerZ + 1, 'minecraft:air');
-        totalNoteBlocks++;
-      }
-
-      // Additional simultaneous chord notes (3, 4, etc.) placed via 0-delay redstone spine extension
-      for (let chordIdx = 2; chordIdx < events.length; chordIdx += 2) {
+      for (let chordIdx = 0; chordIdx < events.length; chordIdx += 3) {
         advancePosition();
-        centerZ = getLaneZ(laneIndex);
+        const centerZ = getLaneZ(laneIndex);
 
-        // Instant redstone wire along spine connects directly from previous trigger block
-        setBlock(curX, 1, centerZ, 'minecraft:redstone_wire[power=0]');
-        setBlock(curX, 0, centerZ, 'minecraft:stone');
-        setBlock(curX, 2, centerZ, 'minecraft:air');
-
-        // North flank note
-        const evA = events[chordIdx]!;
+        // Primary note placed directly in-line on the circuit spine
+        // Repeater -> Note Block -> Repeater conducts power through the solid note block
+        const ev0 = events[chordIdx]!;
         setBlock(
           curX,
           1,
-          centerZ - 1,
-          `minecraft:note_block[instrument=${evA.instrument},note=${evA.note},powered=false]`
+          centerZ,
+          `minecraft:note_block[instrument=${ev0.instrument},note=${ev0.note},powered=false]`
         );
-        setBlock(curX, 0, centerZ - 1, evA.baseBlock);
-        setBlock(curX, 2, centerZ - 1, 'minecraft:air');
+        setBlock(curX, 0, centerZ, ev0.baseBlock);
+        setBlock(curX, 2, centerZ, 'minecraft:air');
         totalNoteBlocks++;
 
-        // South flank note (if exists)
+        // Second note placed on North flank (Z - 1)
         if (chordIdx + 1 < events.length) {
-          const evB = events[chordIdx + 1]!;
+          const ev1 = events[chordIdx + 1]!;
+          setBlock(
+            curX,
+            1,
+            centerZ - 1,
+            `minecraft:note_block[instrument=${ev1.instrument},note=${ev1.note},powered=false]`
+          );
+          setBlock(curX, 0, centerZ - 1, ev1.baseBlock);
+          setBlock(curX, 2, centerZ - 1, 'minecraft:air');
+          totalNoteBlocks++;
+        }
+
+        // Third note placed on South flank (Z + 1)
+        if (chordIdx + 2 < events.length) {
+          const ev2 = events[chordIdx + 2]!;
           setBlock(
             curX,
             1,
             centerZ + 1,
-            `minecraft:note_block[instrument=${evB.instrument},note=${evB.note},powered=false]`
+            `minecraft:note_block[instrument=${ev2.instrument},note=${ev2.note},powered=false]`
           );
-          setBlock(curX, 0, centerZ + 1, evB.baseBlock);
+          setBlock(curX, 0, centerZ + 1, ev2.baseBlock);
           setBlock(curX, 2, centerZ + 1, 'minecraft:air');
           totalNoteBlocks++;
         }
