@@ -97,14 +97,22 @@ export function buildCircuitGrid(
         laneIndex++;
         const newZ = getLaneZ(laneIndex);
         dirX = -1;
-        curX = maxLaneX;
 
-        // Place continuous redstone wire at X = turnEastX from oldZ to newZ
+        // Place continuous redstone wire along turnEastX from oldZ to newZ
         for (let z = oldZ; z <= newZ; z++) {
           setBlock(turnEastX, 1, z, 'minecraft:redstone_wire[power=0]');
           setBlock(turnEastX, 0, z, 'minecraft:stone');
           setBlock(turnEastX, 2, z, 'minecraft:air');
         }
+
+        // Route redstone wire directly into the new lane at (maxLaneX, 1, newZ)
+        // so redstone connects seamlessly into the next block without adding any artificial repeater delay
+        setBlock(maxLaneX, 1, newZ, 'minecraft:redstone_wire[power=0]');
+        setBlock(maxLaneX, 0, newZ, 'minecraft:stone');
+        setBlock(maxLaneX, 2, newZ, 'minecraft:air');
+
+        // Next playable block in the lane starts at maxLaneX - 1
+        curX = maxLaneX - 1;
       }
     } else {
       if (curX > minLaneX) {
@@ -115,14 +123,22 @@ export function buildCircuitGrid(
         laneIndex++;
         const newZ = getLaneZ(laneIndex);
         dirX = 1;
-        curX = minLaneX;
 
-        // Place continuous redstone wire at X = turnWestX from oldZ to newZ
+        // Place continuous redstone wire along turnWestX from oldZ to newZ
         for (let z = oldZ; z <= newZ; z++) {
           setBlock(turnWestX, 1, z, 'minecraft:redstone_wire[power=0]');
           setBlock(turnWestX, 0, z, 'minecraft:stone');
           setBlock(turnWestX, 2, z, 'minecraft:air');
         }
+
+        // Route redstone wire directly into the new lane at (minLaneX, 1, newZ)
+        // so redstone connects seamlessly into the next block without adding any artificial repeater delay
+        setBlock(minLaneX, 1, newZ, 'minecraft:redstone_wire[power=0]');
+        setBlock(minLaneX, 0, newZ, 'minecraft:stone');
+        setBlock(minLaneX, 2, newZ, 'minecraft:air');
+
+        // Next playable block in the lane starts at minLaneX + 1
+        curX = minLaneX + 1;
       }
     }
   };
@@ -159,67 +175,48 @@ export function buildCircuitGrid(
 
     // Now place note blocks for this tick
     if (events.length > 0) {
-      for (let chordIdx = 0; chordIdx < events.length; chordIdx += 3) {
-        // If there are > 3 simultaneous notes at this tick, place a 1-tick repeater before the next note cluster
-        // to guarantee that note blocks are NEVER placed after each other along the transmission track!
-        if (chordIdx > 0) {
-          advancePosition();
-          const z = getLaneZ(laneIndex);
-          const facing: RepeaterFacing = dirX === 1 ? 'west' : 'east';
-          setBlock(
-            curX,
-            1,
-            z,
-            `minecraft:repeater[delay=1,facing=${facing},powered=false]`
-          );
-          setBlock(curX, 0, z, 'minecraft:stone');
-          setBlock(curX, 2, z, 'minecraft:air');
-          totalRepeaters++;
-        }
+      advancePosition();
+      const centerZ = getLaneZ(laneIndex);
 
-        advancePosition();
-        const centerZ = getLaneZ(laneIndex);
+      // Primary note placed directly in-line on the circuit spine
+      // Repeater -> Note Block -> Repeater conducts power through the solid note block
+      const ev0 = events[0]!;
+      setBlock(
+        curX,
+        1,
+        centerZ,
+        `minecraft:note_block[instrument=${ev0.instrument},note=${ev0.note},powered=false]`
+      );
+      setBlock(curX, 0, centerZ, ev0.baseBlock);
+      setBlock(curX, 2, centerZ, 'minecraft:air');
+      totalNoteBlocks++;
 
-        // Primary note placed directly in-line on the circuit spine
-        // Repeater -> Note Block -> Repeater conducts power through the solid note block
-        const ev0 = events[chordIdx]!;
+      // Max 1 chord note to North flank (Z - 1)
+      if (events.length > 1) {
+        const ev1 = events[1]!;
         setBlock(
           curX,
           1,
-          centerZ,
-          `minecraft:note_block[instrument=${ev0.instrument},note=${ev0.note},powered=false]`
+          centerZ - 1,
+          `minecraft:note_block[instrument=${ev1.instrument},note=${ev1.note},powered=false]`
         );
-        setBlock(curX, 0, centerZ, ev0.baseBlock);
-        setBlock(curX, 2, centerZ, 'minecraft:air');
+        setBlock(curX, 0, centerZ - 1, ev1.baseBlock);
+        setBlock(curX, 2, centerZ - 1, 'minecraft:air');
         totalNoteBlocks++;
+      }
 
-        // Max 1 chord note to North flank (Z - 1)
-        if (chordIdx + 1 < events.length) {
-          const ev1 = events[chordIdx + 1]!;
-          setBlock(
-            curX,
-            1,
-            centerZ - 1,
-            `minecraft:note_block[instrument=${ev1.instrument},note=${ev1.note},powered=false]`
-          );
-          setBlock(curX, 0, centerZ - 1, ev1.baseBlock);
-          setBlock(curX, 2, centerZ - 1, 'minecraft:air');
-          totalNoteBlocks++;
-        }
-
-        // Max 1 chord note to South flank (Z + 1)
-        if (chordIdx + 2 < events.length) {
-          const ev2 = events[chordIdx + 2]!;
-          setBlock(
-            curX,
-            1,
-            centerZ + 1,
-            `minecraft:note_block[instrument=${ev2.instrument},note=${ev2.note},powered=false]`
-          );
-          setBlock(curX, 0, centerZ + 1, ev2.baseBlock);
-          setBlock(curX, 2, centerZ + 1, 'minecraft:air');
-          totalNoteBlocks++;
-        }
+      // Max 1 chord note to South flank (Z + 1)
+      if (events.length > 2) {
+        const ev2 = events[2]!;
+        setBlock(
+          curX,
+          1,
+          centerZ + 1,
+          `minecraft:note_block[instrument=${ev2.instrument},note=${ev2.note},powered=false]`
+        );
+        setBlock(curX, 0, centerZ + 1, ev2.baseBlock);
+        setBlock(curX, 2, centerZ + 1, 'minecraft:air');
+        totalNoteBlocks++;
       }
     }
 

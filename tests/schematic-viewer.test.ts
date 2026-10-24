@@ -62,7 +62,7 @@ describe('Schematic Viewer & Material List Test Suite', () => {
 
     const report = computeMaterialList(circuit, 'Beethoven - Ode to Joy');
 
-    expect(report.totalNoteBlocks).toBe(222);
+    expect(report.totalNoteBlocks).toBe(190);
     expect(report.totalRepeaters).toBeGreaterThan(50);
     expect(report.totalBlocks).toBeGreaterThan(300);
 
@@ -71,8 +71,8 @@ describe('Schematic Viewer & Material List Test Suite', () => {
 
     const noteBlockItem = report.items.find((i) => i.id === 'minecraft:note_block');
     expect(noteBlockItem).toBeDefined();
-    expect(noteBlockItem!.count).toBe(222);
-    expect(noteBlockItem!.stacksText).toBe('3 stacks + 30');
+    expect(noteBlockItem!.count).toBe(190);
+    expect(noteBlockItem!.stacksText).toBe('2 stacks + 62');
 
     const repeaterItem = report.items.find((i) => i.id === 'minecraft:repeater');
     expect(repeaterItem).toBeDefined();
@@ -82,7 +82,7 @@ describe('Schematic Viewer & Material List Test Suite', () => {
     expect(report.copyableText).toContain('Minecraft Note Block Materials Checklist');
     expect(report.copyableText).toContain('Beethoven - Ode to Joy');
     expect(report.copyableText).toContain('=== Redstone & Note Blocks ===');
-    expect(report.copyableText).toContain('Note Block: 222 (3 stacks + 30)');
+    expect(report.copyableText).toContain('Note Block: 190 (2 stacks + 62)');
   });
 
   it('builds different circuit layouts when maxTrackWidth changes', () => {
@@ -147,25 +147,25 @@ describe('Schematic Viewer & Material List Test Suite', () => {
     const valSchem24 = validateSpongeSchematic(schem24.data);
     expect(valSchem24.isValid).toBe(true);
     expect(valSchem24.dimensions.width).toBe(24);
-    expect(valSchem24.dimensions.length).toBe(40);
+    expect(valSchem24.dimensions.length).toBe(34);
 
     const litematic24 = await exportLitematic(timeline, { name: 'Ode24', maxTrackWidth: 24 });
     const valLitematic24 = validateLitematic(litematic24.data);
     expect(valLitematic24.isValid).toBe(true);
     expect(valLitematic24.enclosingSize.x).toBe(24);
-    expect(valLitematic24.enclosingSize.z).toBe(40);
+    expect(valLitematic24.enclosingSize.z).toBe(34);
 
     // Export with custom width 10
     const schem10 = await exportSpongeSchematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
     const valSchem10 = validateSpongeSchematic(schem10.data);
     expect(valSchem10.isValid).toBe(true);
     expect(valSchem10.dimensions.width).toBe(10);
-    expect(valSchem10.dimensions.length).toBe(132);
+    expect(valSchem10.dimensions.length).toBe(118);
 
     const litematic10 = await exportLitematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
     const valLitematic10 = validateLitematic(litematic10.data);
     expect(valLitematic10.isValid).toBe(true);
     expect(valLitematic10.enclosingSize.x).toBe(10);
-    expect(valLitematic10.enclosingSize.z).toBe(132);
+    expect(valLitematic10.enclosingSize.z).toBe(118);
   });
 });

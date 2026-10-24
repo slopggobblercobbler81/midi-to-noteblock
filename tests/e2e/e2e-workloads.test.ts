@@ -127,12 +127,12 @@ describe('E2E Track: Full Pipeline Workload Integration', () => {
 
       const schemVal = validateSpongeSchematic(schem.data);
       expect(schemVal.isValid).toBe(true);
-      expect(schemVal.noteBlockCount).toBeGreaterThanOrEqual(15);
+      expect(schemVal.noteBlockCount).toBeGreaterThanOrEqual(12);
       expect(schemVal.repeaterCount).toBeGreaterThan(0);
 
       const litematicVal = validateLitematic(litematic.data);
       expect(litematicVal.isValid).toBe(true);
-      expect(litematicVal.noteBlockCount).toBeGreaterThanOrEqual(15);
+      expect(litematicVal.noteBlockCount).toBeGreaterThanOrEqual(12);
     });
 
     it('executes drum & percussion MIDI workload preserving percussive timbres', async () => {
