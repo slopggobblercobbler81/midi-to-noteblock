@@ -46,6 +46,7 @@ const conversionOptions: ConversionOptions = {
   manualTranspose: 0,
   preserveKey: false,
   enableOctaveFolding: true,
+  snapTempoToGrid: false,
   instrumentOverrides: {},
 };
 let maxTrackWidth = 16;
@@ -420,6 +421,15 @@ export function renderApp(): void {
                   ${conversionOptions.enableOctaveFolding !== false ? 'checked' : ''}
                 />
                 <span>Fold out-of-range notes into [0, 24]</span>
+              </label>
+
+              <label class="checkbox-row">
+                <input
+                  type="checkbox"
+                  id="snapTempoCheck"
+                  ${conversionOptions.snapTempoToGrid ? 'checked' : ''}
+                />
+                <span>Snap tempo to steady redstone grid (fixes choppy rhythm)</span>
               </label>
             </div>
           </section>
@@ -796,6 +806,15 @@ function attachEventListeners(): void {
   if (octaveFoldCheck) {
     octaveFoldCheck.addEventListener('change', () => {
       conversionOptions.enableOctaveFolding = octaveFoldCheck.checked;
+      recomputeTimeline();
+      renderApp();
+    });
+  }
+
+  const snapTempoCheck = document.getElementById('snapTempoCheck') as HTMLInputElement | null;
+  if (snapTempoCheck) {
+    snapTempoCheck.addEventListener('change', () => {
+      conversionOptions.snapTempoToGrid = snapTempoCheck.checked;
       recomputeTimeline();
       renderApp();
     });

@@ -18,6 +18,7 @@ import {
   type NoteBlockEvent,
   calculateNoteBlockPitchMultiplier,
   REDSTONE_TICKS_PER_SECOND,
+  REDSTONE_TICK_SECONDS,
 } from './types';
 
 // Standard F#4 frequency (pitch = 12)
@@ -320,19 +321,25 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     this.stopActiveNodes();
 
-    const events = this.song.allEvents;
     const now = this.ctx.currentTime;
     const speed = this.state.playbackSpeed;
 
-    for (const ev of events) {
-      if (ev.timestampSeconds < fromSeconds) continue;
+    // Iterate through redstone ticks in eventsByTick so preview reproduces exact in-game behavior:
+    // 1. Precise redstone tick timing (0.1s increments) matching physical repeater chains
+    // 2. Exact physical polyphony limit (up to 3 simultaneous notes: center spine + 2 lateral flanks)
+    for (const [tick, events] of this.song.eventsByTick) {
+      const eventTime = tick * REDSTONE_TICK_SECONDS;
+      if (eventTime < fromSeconds) continue;
 
-      const deltaSongSeconds = ev.timestampSeconds - fromSeconds;
+      const deltaSongSeconds = eventTime - fromSeconds;
       const delayAudioSeconds = deltaSongSeconds / speed;
       const scheduledTime = now + delayAudioSeconds;
 
-      // Play audio on schedule
-      this.triggerInstrumentSound(ev, scheduledTime);
+      // In Minecraft, at most 3 note blocks are placed per column (center, north, south)
+      const playableEvents = events.slice(0, 3);
+      for (const ev of playableEvents) {
+        this.triggerInstrumentSound(ev, scheduledTime);
+      }
     }
 
     // Schedule song end

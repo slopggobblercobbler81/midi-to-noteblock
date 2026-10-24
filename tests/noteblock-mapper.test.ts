@@ -16,6 +16,9 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { parseMidi } from '../src/core/midi-parser';
 import type {
   MidiFile,
   MidiTrack,
@@ -709,6 +712,47 @@ describe('Unit Test Suite: Note Block Mapper Engine', () => {
       expect(getNaturalOctaveOffset('bass')).toBe(-24);
       expect(getNaturalOctaveOffset('flute')).toBe(12);
       expect(getNaturalOctaveOffset('bell')).toBe(24);
+    });
+
+    it('snaps tempo to steady redstone grid eliminating fractional tick choppiness', () => {
+      const midiBuf = fs.readFileSync(path.resolve(__dirname, '../Ode_to_Joy.mid'));
+      const midi = parseMidi(midiBuf);
+
+      // Default: unsnapped (produces choppy 3-then-2 tick intervals on sixteenth notes)
+      const unsnapped = mapper!.convertToSongTimeline(midi);
+      const unsnappedTicks = Array.from(unsnapped.eventsByTick.keys()).sort((a, b) => a - b);
+      // Observe the 3-then-2 stutter at tick 65 -> 68 -> 70
+      expect(unsnappedTicks).toContain(65);
+      expect(unsnappedTicks).toContain(68);
+      expect(unsnappedTicks).toContain(70);
+
+      // Snapped to steady grid: snaps to 4 ticks per quarter note (150 BPM)
+      // Every beat is 4 ticks, and eighth notes are 2 ticks, eliminating the stutter
+      const snapped = mapper!.convertToSongTimeline(midi, { snapTempoToGrid: true });
+      expect(snapped.bpm).toBe(150);
+      const snappedTicks = Array.from(snapped.eventsByTick.keys()).sort((a, b) => a - b);
+      const deltas = [];
+      for (let i = 1; i < snappedTicks.length; i++) {
+        deltas.push(snappedTicks[i]! - snappedTicks[i - 1]!);
+      }
+      // Every single delta in the entire song is either 4 ticks (quarter note) or 2 ticks (eighth note)!
+      for (const delta of deltas) {
+        expect([2, 4]).toContain(delta);
+      }
+      expect(deltas.slice(0, 16)).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 4]);
+
+      // Explicit grid: 6 ticks per beat (100 BPM)
+      const snapped6 = mapper!.convertToSongTimeline(midi, { snapTempoToGrid: true, gridTicksPerQuarter: 6 });
+      expect(snapped6.bpm).toBe(100);
+      const snappedTicks6 = Array.from(snapped6.eventsByTick.keys()).sort((a, b) => a - b);
+      const deltas6 = [];
+      for (let i = 1; i < snappedTicks6.length; i++) {
+        deltas6.push(snappedTicks6[i]! - snappedTicks6[i - 1]!);
+      }
+      for (const delta of deltas6) {
+        expect([3, 6]).toContain(delta);
+      }
+      expect(deltas6.slice(0, 16)).toEqual([6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 6]);
     });
   });
 });

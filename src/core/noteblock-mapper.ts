@@ -658,7 +658,39 @@ export function convertToSongTimeline(
   const globalTranspose = findOptimalTransposition(melodicNotesForOptimization, options);
   const enableFolding = options?.enableOctaveFolding !== false;
 
-  // 4. Process all note events into NoteBlockEvent items
+  // 4. Configure Redstone Grid Snapping (eliminates fractional tick-rounding tempo choppiness)
+  const snapTempo = Boolean(options?.snapTempoToGrid);
+  const ppq = midi.ticksPerQuarterNote || 480;
+  let ticksPerQuarter = 4;
+
+  if (snapTempo) {
+    if (options?.gridTicksPerQuarter && options.gridTicksPerQuarter > 0) {
+      ticksPerQuarter = Math.round(options.gridTicksPerQuarter);
+    } else {
+      const rawTicksPerQuarter = 600 / initialBpm;
+      let containsEighths = false;
+      let containsSixteenths = false;
+
+      for (const track of midi.tracks) {
+        for (const n of track.notes) {
+          if (n.startTick % ppq !== 0) containsEighths = true;
+          if (n.startTick % Math.max(1, Math.round(ppq / 2)) !== 0) containsSixteenths = true;
+        }
+      }
+
+      if (containsSixteenths) {
+        // Sixteenth notes require divisibility by 4 (4 ticks = 150 BPM, 8 ticks = 75 BPM)
+        ticksPerQuarter = Math.abs(rawTicksPerQuarter - 4) <= Math.abs(rawTicksPerQuarter - 8) ? 4 : 8;
+      } else if (containsEighths) {
+        // Eighth notes require divisibility by 2 (4 ticks = 150 BPM, 6 ticks = 100 BPM)
+        ticksPerQuarter = Math.abs(rawTicksPerQuarter - 4) <= Math.abs(rawTicksPerQuarter - 6) ? 4 : 6;
+      } else {
+        ticksPerQuarter = Math.max(1, Math.round(rawTicksPerQuarter));
+      }
+    }
+  }
+
+  // 5. Process all note events into NoteBlockEvent items
   const allEvents: NoteBlockEvent[] = [];
   const trackSummaries: TrackSummary[] = [];
 
@@ -690,12 +722,22 @@ export function convertToSongTimeline(
       // Enforce strict invariant: 0 <= note <= 24
       finalNotePitch = Math.max(MIN_NOTEBLOCK_PITCH, Math.min(MAX_NOTEBLOCK_PITCH, Math.round(finalNotePitch)));
 
-      const redstoneTick = quantizeToRedstoneTick(rawNote.startSeconds);
+      let redstoneTick: number;
+      let timestampSeconds: number;
+
+      if (snapTempo && rawNote.startTick !== undefined) {
+        redstoneTick = Math.max(0, Math.round((rawNote.startTick / ppq) * ticksPerQuarter));
+        timestampSeconds = Number((redstoneTick * REDSTONE_TICK_SECONDS).toFixed(3));
+      } else {
+        redstoneTick = quantizeToRedstoneTick(rawNote.startSeconds);
+        timestampSeconds = rawNote.startSeconds;
+      }
+
       const velocityFactor = Number(Math.max(0.01, Math.min(1.0, rawNote.velocity / 127)).toFixed(3));
 
       allEvents.push({
         redstoneTick,
-        timestampSeconds: rawNote.startSeconds,
+        timestampSeconds,
         instrument: finalInstrument,
         baseBlock: finalBaseBlock,
         note: finalNotePitch,
@@ -716,7 +758,7 @@ export function convertToSongTimeline(
     });
   }
 
-  // 5. Sort all events chronologically (stable: tick -> time -> track -> note)
+  // 6. Sort all events chronologically (stable: tick -> time -> track -> note)
   allEvents.sort((a, b) => {
     if (a.redstoneTick !== b.redstoneTick) return a.redstoneTick - b.redstoneTick;
     if (a.timestampSeconds !== b.timestampSeconds) return a.timestampSeconds - b.timestampSeconds;
@@ -724,7 +766,7 @@ export function convertToSongTimeline(
     return a.note - b.note;
   });
 
-  // 6. Group into eventsByTick Map
+  // 7. Group into eventsByTick Map
   const eventsByTick = new Map<number, NoteBlockEvent[]>();
   for (const event of allEvents) {
     let tickList = eventsByTick.get(event.redstoneTick);
@@ -735,19 +777,22 @@ export function convertToSongTimeline(
     tickList.push(event);
   }
 
-  // 7. Calculate timeline bounds
+  // 8. Calculate timeline bounds
   let maxTick = 0;
   if (allEvents.length > 0) {
     maxTick = allEvents[allEvents.length - 1]!.redstoneTick;
   }
-  const durationSec = midi.durationSeconds > 0 ? midi.durationSeconds : (maxTick * REDSTONE_TICK_SECONDS);
+  const effectiveBpm = snapTempo ? Math.round(600 / ticksPerQuarter) : initialBpm;
+  const durationSec = snapTempo
+    ? Number((maxTick * REDSTONE_TICK_SECONDS).toFixed(2))
+    : (midi.durationSeconds > 0 ? midi.durationSeconds : (maxTick * REDSTONE_TICK_SECONDS));
   const totalRedstoneTicks = Math.max(maxTick, quantizeToRedstoneTick(durationSec));
 
   return {
     title,
     totalRedstoneTicks,
     durationSeconds: durationSec,
-    bpm: initialBpm,
+    bpm: effectiveBpm,
     eventsByTick,
     allEvents,
     tracks: trackSummaries,

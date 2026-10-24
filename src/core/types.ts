@@ -453,6 +453,11 @@ export interface ConversionOptions {
   snapTempoToGrid?: boolean;
 
   /**
+   * Optional manual ticks per quarter note for grid snapping (e.g. 4 for 150 BPM, 6 for 100 BPM).
+   */
+  gridTicksPerQuarter?: number;
+
+  /**
    * Per-track instrument overrides: Track ID -> MinecraftInstrument.
    */
   instrumentOverrides?: Record<number, MinecraftInstrument>;
