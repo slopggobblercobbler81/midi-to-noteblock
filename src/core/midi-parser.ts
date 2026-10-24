@@ -586,18 +586,18 @@ export class TempoMap {
     }
 
     this.points = this.entries;
-
+    this.ppqMillion = this.ppq * 1000000;
     const len = this.entries.length;
     this.ticksArr = new Int32Array(len);
     this.secondsArr = new Float64Array(len);
     this.microsArr = new Float64Array(len);
-
     for (let i = 0; i < len; i++) {
       const e = this.entries[i]!;
       this.ticksArr[i] = e.tick;
       this.secondsArr[i] = e.seconds;
       this.microsArr[i] = e.microsecondsPerQuarter;
     }
+
   }
 
   /**

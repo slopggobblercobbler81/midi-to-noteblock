@@ -31,6 +31,7 @@ describe('User MIDI File Conversion Test', () => {
     // Export to Sponge .schem
     const schemResult = await exportSpongeSchematic(timeline, { name: 'Takeshi_abo_Lease' });
     expect(schemResult.filename).toBe('Takeshi_abo_Lease.schem');
+    fs.writeFileSync(path.resolve(__dirname, '../Takeshi_abo_Lease.schem'), schemResult.data);
     const schemVal = validateSpongeSchematic(schemResult.data);
     expect(schemVal.isValid).toBe(true);
     expect(schemVal.errors).toHaveLength(0);
@@ -39,6 +40,7 @@ describe('User MIDI File Conversion Test', () => {
     // Export to Litematica .litematic
     const litematicResult = await exportLitematic(timeline, { name: 'Takeshi_abo_Lease' });
     expect(litematicResult.filename).toBe('Takeshi_abo_Lease.litematic');
+    fs.writeFileSync(path.resolve(__dirname, '../Takeshi_abo_Lease.litematic'), litematicResult.data);
     const litematicVal = validateLitematic(litematicResult.data);
     expect(litematicVal.isValid).toBe(true);
     expect(litematicVal.errors).toHaveLength(0);
