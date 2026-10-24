@@ -627,7 +627,7 @@ function setupSchematicPreview(canvas: HTMLCanvasElement): void {
         detailHtml = `
           <span class="inspector-badge inspector-badge-rep">⚡ Repeater</span>
           <span class="inspector-item">Delay: <strong>${info.delay}t (${(info.delay! * 0.1).toFixed(1)}s)</strong></span>
-          <span class="inspector-item">Output: <strong>${info.facing === 'east' ? 'East (→)' : info.facing === 'west' ? 'West (←)' : info.facing}</strong></span>
+          <span class="inspector-item">Output: <strong>${info.facing === 'west' ? 'East (→)' : info.facing === 'east' ? 'West (←)' : info.facing}</strong></span>
         `;
       } else if (info.category === 'wire') {
         detailHtml = `

@@ -75,10 +75,9 @@ export function buildCircuitGrid(
 
   const getLaneZ = (lane: number) => 1 + lane * 3;
 
-  // Initial input repeater at (turnWestX, 1, 1) facing East into the track (+X).
-  // In Minecraft Java Edition: repeater facing defines the output direction.
-  // To output East into the track (+X), facing must be 'east'.
-  setBlock(turnWestX, 1, 1, 'minecraft:repeater[delay=1,facing=east,powered=false]');
+  // Initial input repeater at (turnWestX, 1, 1) facing into the track (+X).
+  // In Minecraft NBT schematics: facing=west outputs East (+X).
+  setBlock(turnWestX, 1, 1, 'minecraft:repeater[delay=1,facing=west,powered=false]');
   setBlock(turnWestX, 0, 1, 'minecraft:stone');
   setBlock(turnWestX, 2, 1, 'minecraft:air');
   totalRepeaters++;
@@ -142,10 +141,9 @@ export function buildCircuitGrid(
       for (const delay of repeaterDelays) {
         advancePosition();
         const z = getLaneZ(laneIndex);
-        // In Minecraft Java Edition: facing defines the output direction.
-        // Signal traveling East (dirX === 1) -> facing: 'east'
-        // Signal traveling West (dirX === -1) -> facing: 'west'
-        const facing: RepeaterFacing = dirX === 1 ? 'east' : 'west';
+        // Signal traveling East (dirX === 1) -> facing: 'west'
+        // Signal traveling West (dirX === -1) -> facing: 'east'
+        const facing: RepeaterFacing = dirX === 1 ? 'west' : 'east';
 
         setBlock(
           curX,
@@ -167,7 +165,7 @@ export function buildCircuitGrid(
         if (chordIdx > 0) {
           advancePosition();
           const z = getLaneZ(laneIndex);
-          const facing: RepeaterFacing = dirX === 1 ? 'east' : 'west';
+          const facing: RepeaterFacing = dirX === 1 ? 'west' : 'east';
           setBlock(
             curX,
             1,

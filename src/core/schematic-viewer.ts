@@ -369,12 +369,12 @@ export function parseBlockInfo(
 
   if (baseName === 'minecraft:repeater') {
     const delay = parseInt(props['delay'] || '1', 10);
-    const facing = props['facing'] || 'east';
-    // In Minecraft Java Edition: facing defines the direction of the output signal.
+    const facing = props['facing'] || 'west';
+    // In Minecraft schematics: facing=west outputs East (+X), facing=east outputs West (-X).
     let outputDir = 'East (+X)';
-    if (facing === 'west') outputDir = 'West (-X)';
-    else if (facing === 'north') outputDir = 'North (-Z)';
-    else if (facing === 'south') outputDir = 'South (+Z)';
+    if (facing === 'east') outputDir = 'West (-X)';
+    else if (facing === 'north') outputDir = 'South (+Z)';
+    else if (facing === 'south') outputDir = 'North (-Z)';
 
     return {
       x,
@@ -703,15 +703,11 @@ export class SchematicCanvasRenderer {
     ctx.strokeRect(px + 1.5, py + 1.5, s - 3, s - 3);
 
     // Output arrow direction:
-    // In Minecraft Java Edition: facing defines the direction the output points.
-    // facing=east -> outputs East (→)
-    // facing=west -> outputs West (←)
-    // facing=south -> outputs South (↓)
-    // facing=north -> outputs North (↑)
+    // In Minecraft schematics: facing=west outputs East (→), facing=east outputs West (←)
     let arrow = '→';
-    if (facing === 'west') arrow = '←';
-    else if (facing === 'south') arrow = '↓';
-    else if (facing === 'north') arrow = '↑';
+    if (facing === 'east') arrow = '←';
+    else if (facing === 'north') arrow = '↓';
+    else if (facing === 'south') arrow = '↑';
 
     // Redstone torches & arrow
     ctx.fillStyle = '#ef4444';
