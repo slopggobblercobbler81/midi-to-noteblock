@@ -37,7 +37,7 @@ A pure client-side web application that converts standard MIDI files into playab
 1. **Open the web application** at [https://slopggobblercobbler81.github.io/midi-to-noteblock/](https://slopggobblercobbler81.github.io/midi-to-noteblock/) or run locally.
 2. **Load a MIDI file**:
    - Drag & drop any `.mid` or `.midi` file into the upload zone, or click **Browse File**.
-   - Or click **Load Demo Song (Takeshi Abo - Lease)** for instant testing with the preloaded MIDI.
+   - Or click **Load Sample (Beethoven - Ode to Joy)** for instant testing with the preloaded public-domain MIDI.
 3. **Preview & Customize**:
    - Hit **Play** to listen to the synthesized Minecraft arrangement.
    - Adjust playback speed, transpose key, or override specific track instruments in the inspector.

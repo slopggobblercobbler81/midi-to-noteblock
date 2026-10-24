@@ -93,7 +93,7 @@ async function loadDemoSong(): Promise<void> {
     const res = await fetch('./demo.mid');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = await res.arrayBuffer();
-    await loadMidiBuffer(buf, 'Takeshi abo - Lease.mid');
+    await loadMidiBuffer(buf, 'Beethoven - Ode to Joy.mid');
   } catch (err) {
     alert(`Could not load demo MIDI: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -207,7 +207,7 @@ export function renderApp(): void {
 
         <div class="upload-bar">
           <button id="btnBrowse" class="btn btn-subtle">Choose File</button>
-          <button id="btnDemo" class="btn btn-primary">Load Sample (Takeshi Abo - Lease)</button>
+          <button id="btnDemo" class="btn btn-primary">Load Sample (Beethoven - Ode to Joy)</button>
         </div>
       </section>
 
