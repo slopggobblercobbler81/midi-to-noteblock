@@ -97,6 +97,64 @@ export async function loadMidiBuffer(buffer: ArrayBuffer | Uint8Array, fileName 
   }
 }
 
+function getActiveTrackWidth(): number {
+  const input = document.getElementById('widthInput') as HTMLInputElement | null;
+  if (input) {
+    const val = parseInt(input.value, 10);
+    if (!isNaN(val) && val >= 5) {
+      maxTrackWidth = Math.max(5, Math.min(128, val));
+    }
+  }
+  return maxTrackWidth;
+}
+
+function renderCircuitBadgesHtml(circuit: GeneratedCircuit): string {
+  return `
+    <span class="badge-dim">${circuit.dimensions.width}W × ${circuit.dimensions.height}H × ${circuit.dimensions.length}L blocks</span>
+    <span class="badge-dim">${circuit.dimensions.width * circuit.dimensions.length} m² footprint</span>
+  `;
+}
+
+function renderMaterialsGridHtml(report: MaterialListReport): string {
+  return report.categories.map((cat) => `
+    <div class="material-category-card">
+      <div class="material-cat-title">${cat.title}</div>
+      <div class="material-items-list">
+        ${cat.items.map((item) => `
+          <div class="material-row">
+            <div class="material-name-col">
+              <span class="material-name">${item.name}</span>
+              ${item.instrumentName ? `<span class="material-inst-tag">${item.instrumentName}</span>` : ''}
+            </div>
+            <div class="material-count-col">
+              <strong class="material-total">${item.count}</strong>
+              <span class="material-stacks">(${item.stacksText})</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateCircuitBadgesAndMaterials(): void {
+  if (!currentCircuit || !currentMaterialReport) return;
+
+  const badgesEl = document.getElementById('schematicHeaderBadges');
+  if (badgesEl) {
+    badgesEl.innerHTML = renderCircuitBadgesHtml(currentCircuit);
+  }
+
+  const materialsGrid = document.getElementById('materialsGrid');
+  if (materialsGrid) {
+    materialsGrid.innerHTML = renderMaterialsGridHtml(currentMaterialReport);
+  }
+
+  if (schematicRenderer) {
+    schematicRenderer.setCircuit(currentCircuit);
+  }
+}
+
 function recomputeCircuit(): void {
   if (!currentTimeline) {
     currentCircuit = null;
@@ -341,7 +399,7 @@ export function renderApp(): void {
                   type="number"
                   id="widthInput"
                   min="5"
-                  max="32"
+                  max="128"
                   value="${maxTrackWidth}"
                 />
               </div>
@@ -413,12 +471,9 @@ export function renderApp(): void {
               <div class="panel-title">Schematic Circuit Preview</div>
               <div class="panel-subtitle">Interactive 2D top-down view of generated redstone wiring, repeaters, and note blocks</div>
             </div>
-            ${currentCircuit ? `
-              <div class="schematic-header-badges">
-                <span class="badge-dim">${currentCircuit.dimensions.width}W × ${currentCircuit.dimensions.height}H × ${currentCircuit.dimensions.length}L blocks</span>
-                <span class="badge-dim">${currentCircuit.dimensions.width * currentCircuit.dimensions.length} m² footprint</span>
-              </div>
-            ` : ''}
+            <div id="schematicHeaderBadges" class="schematic-header-badges">
+              ${currentCircuit ? renderCircuitBadgesHtml(currentCircuit) : ''}
+            </div>
           </div>
 
           <div class="preview-toolbar">
@@ -449,7 +504,7 @@ export function renderApp(): void {
 
         <!-- Material Checklist Section -->
         ${currentMaterialReport ? `
-          <section class="panel">
+          <section id="materialsSection" class="panel">
             <div class="panel-header">
               <div>
                 <div class="panel-title">Survival Material Checklist</div>
@@ -460,26 +515,8 @@ export function renderApp(): void {
               </button>
             </div>
 
-            <div class="materials-grid">
-              ${currentMaterialReport.categories.map((cat) => `
-                <div class="material-category-card">
-                  <div class="material-cat-title">${cat.title}</div>
-                  <div class="material-items-list">
-                    ${cat.items.map((item) => `
-                      <div class="material-row">
-                        <div class="material-name-col">
-                          <span class="material-name">${item.name}</span>
-                          ${item.instrumentName ? `<span class="material-inst-tag">${item.instrumentName}</span>` : ''}
-                        </div>
-                        <div class="material-count-col">
-                          <strong class="material-total">${item.count}</strong>
-                          <span class="material-stacks">(${item.stacksText})</span>
-                        </div>
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-              `).join('')}
+            <div id="materialsGrid" class="materials-grid">
+              ${renderMaterialsGridHtml(currentMaterialReport)}
             </div>
           </section>
         ` : ''}
@@ -725,11 +762,27 @@ function attachEventListeners(): void {
   }
 
   if (widthInput) {
-    widthInput.addEventListener('change', () => {
-      maxTrackWidth = Math.max(5, Math.min(32, parseInt(widthInput.value, 10) || 16));
+    const handleWidthChange = (e: Event) => {
+      const rawVal = parseInt(widthInput.value, 10);
+      if (isNaN(rawVal) || rawVal < 5) {
+        if (e.type === 'change') {
+          widthInput.value = '5';
+          maxTrackWidth = 5;
+        } else {
+          return;
+        }
+      } else {
+        maxTrackWidth = Math.max(5, Math.min(128, rawVal));
+        if (e.type === 'change' && rawVal > 128) {
+          widthInput.value = '128';
+        }
+      }
       recomputeCircuit();
-      renderApp();
-    });
+      updateCircuitBadgesAndMaterials();
+    };
+
+    widthInput.addEventListener('input', handleWidthChange);
+    widthInput.addEventListener('change', handleWidthChange);
   }
 
   if (preserveKeyCheck) {
@@ -865,10 +918,11 @@ function attachEventListeners(): void {
 
   if (btnExportSchem && currentTimeline) {
     btnExportSchem.addEventListener('click', async () => {
+      const activeWidth = getActiveTrackWidth();
       const exportName = getCleanExportName();
       const result = await exportSpongeSchematic(currentTimeline!, {
         name: exportName,
-        maxTrackWidth,
+        maxTrackWidth: activeWidth,
       });
       triggerBrowserDownload(result.filename, result.mimeType, result.data);
     });
@@ -876,10 +930,11 @@ function attachEventListeners(): void {
 
   if (btnExportLitematic && currentTimeline) {
     btnExportLitematic.addEventListener('click', async () => {
+      const activeWidth = getActiveTrackWidth();
       const exportName = getCleanExportName();
       const result = await exportLitematic(currentTimeline!, {
         name: exportName,
-        maxTrackWidth,
+        maxTrackWidth: activeWidth,
       });
       triggerBrowserDownload(result.filename, result.mimeType, result.data);
     });

@@ -565,13 +565,14 @@ canvas#visualizer {
   border-radius: var(--radius);
   padding: 0.75rem;
   display: flex;
-  justify-content: center;
 }
 
 .schematic-canvas-container canvas {
   display: block;
   image-rendering: pixelated;
   cursor: crosshair;
+  flex-shrink: 0;
+  margin: auto;
 }
 
 .block-inspector-bar {

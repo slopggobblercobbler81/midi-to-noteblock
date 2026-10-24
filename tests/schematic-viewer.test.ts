@@ -84,4 +84,75 @@ describe('Schematic Viewer & Material List Test Suite', () => {
     expect(report.copyableText).toContain('=== Redstone & Note Blocks ===');
     expect(report.copyableText).toContain('Note Block: 222 (3 stacks + 30)');
   });
+
+  it('builds different circuit layouts when maxTrackWidth changes', () => {
+    const midiBuf = fs.readFileSync(path.resolve(__dirname, '../Ode_to_Joy.mid'));
+    const midi = parseMidi(midiBuf);
+    const timeline = convertToSongTimeline(midi);
+
+    const circuit16 = buildCircuitGrid(timeline, { name: 'Ode', maxTrackWidth: 16 });
+    const circuit24 = buildCircuitGrid(timeline, { name: 'Ode', maxTrackWidth: 24 });
+    const circuit10 = buildCircuitGrid(timeline, { name: 'Ode', maxTrackWidth: 10 });
+
+    console.log('circuit16 dimensions:', circuit16.dimensions);
+    console.log('circuit24 dimensions:', circuit24.dimensions);
+    console.log('circuit10 dimensions:', circuit10.dimensions);
+
+    expect(circuit16.dimensions.width).toBe(16);
+    expect(circuit24.dimensions.width).toBe(24);
+    expect(circuit10.dimensions.width).toBe(10);
+
+    // When width is larger, length (Z) should be shorter (fewer rows)
+    expect(circuit24.dimensions.length).toBeLessThan(circuit16.dimensions.length);
+    // When width is smaller, length (Z) should be longer (more rows)
+    expect(circuit10.dimensions.length).toBeGreaterThan(circuit16.dimensions.length);
+
+    let maxX16 = 0;
+    for (const key of circuit16.blocks.keys()) {
+      const x = parseInt(key.split(',')[0]!, 10);
+      if (x > maxX16) maxX16 = x;
+    }
+    let maxX24 = 0;
+    for (const key of circuit24.blocks.keys()) {
+      const x = parseInt(key.split(',')[0]!, 10);
+      if (x > maxX24) maxX24 = x;
+    }
+    console.log('maxX16:', maxX16, 'maxX24:', maxX24);
+  });
+
+  it('exports valid Sponge and Litematica schematics with custom maxTrackWidth (24 and 10)', async () => {
+    const { exportSpongeSchematic } = await import('../src/core/schem-exporter');
+    const { exportLitematic } = await import('../src/core/litematic-exporter');
+    const { validateSpongeSchematic, validateLitematic } = await import('./fixtures/nbt-reader');
+
+    const midiBuf = fs.readFileSync(path.resolve(__dirname, '../Ode_to_Joy.mid'));
+    const midi = parseMidi(midiBuf);
+    const timeline = convertToSongTimeline(midi);
+
+    // Export with custom width 24
+    const schem24 = await exportSpongeSchematic(timeline, { name: 'Ode24', maxTrackWidth: 24 });
+    const valSchem24 = validateSpongeSchematic(schem24.data);
+    expect(valSchem24.isValid).toBe(true);
+    expect(valSchem24.dimensions.width).toBe(24);
+    expect(valSchem24.dimensions.length).toBe(40);
+
+    const litematic24 = await exportLitematic(timeline, { name: 'Ode24', maxTrackWidth: 24 });
+    const valLitematic24 = validateLitematic(litematic24.data);
+    expect(valLitematic24.isValid).toBe(true);
+    expect(valLitematic24.enclosingSize.x).toBe(24);
+    expect(valLitematic24.enclosingSize.z).toBe(40);
+
+    // Export with custom width 10
+    const schem10 = await exportSpongeSchematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
+    const valSchem10 = validateSpongeSchematic(schem10.data);
+    expect(valSchem10.isValid).toBe(true);
+    expect(valSchem10.dimensions.width).toBe(10);
+    expect(valSchem10.dimensions.length).toBe(127);
+
+    const litematic10 = await exportLitematic(timeline, { name: 'Ode10', maxTrackWidth: 10 });
+    const valLitematic10 = validateLitematic(litematic10.data);
+    expect(valLitematic10.isValid).toBe(true);
+    expect(valLitematic10.enclosingSize.x).toBe(10);
+    expect(valLitematic10.enclosingSize.z).toBe(127);
+  });
 });
