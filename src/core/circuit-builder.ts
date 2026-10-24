@@ -58,31 +58,69 @@ export function buildCircuitGrid(
     };
   }
 
-  // Layout parameters
+  // Serpentine layout boundaries:
+  // X = turnWestX (1) is the West turn column.
+  // X = turnEastX (maxTrackWidth - 2) is the East turn column.
+  // X in [minLaneX, maxLaneX] is the active playable lane.
+  const turnWestX = 1;
+  const turnEastX = maxTrackWidth - 2;
+  const minLaneX = 2;
+  const maxLaneX = maxTrackWidth - 3;
+
   let laneIndex = 0;
-  let curX = 1;
+  let curX = minLaneX;
   let dirX: 1 | -1 = 1;
-  const minX = 1;
-  const maxX = maxTrackWidth - 2;
+  let isFirstPosition = true;
 
   const getLaneZ = (lane: number) => 1 + lane * 3;
 
-  const advancePosition = () => {
-    const nextX = curX + dirX;
-    if (nextX >= minX && nextX <= maxX) {
-      curX = nextX;
-    } else {
-      // Reached boundary, turn into next lane
-      const oldZ = getLaneZ(laneIndex);
-      laneIndex++;
-      const newZ = getLaneZ(laneIndex);
-      dirX = (dirX === 1 ? -1 : 1);
+  // Initial input repeater at (turnWestX, 1, 1) facing East to trigger the first note
+  setBlock(turnWestX, 1, 1, 'minecraft:repeater[delay=1,facing=east,powered=false]');
+  setBlock(turnWestX, 0, 1, 'minecraft:stone');
+  setBlock(turnWestX, 2, 1, 'minecraft:air');
+  totalRepeaters++;
 
-      // Connect with turn wiring at Y=1 and stone substrate at Y=0
-      for (let z = oldZ + 1; z < newZ; z++) {
-        setBlock(curX, 1, z, 'minecraft:redstone_wire[power=0]');
-        setBlock(curX, 0, z, 'minecraft:stone');
-        setBlock(curX, 2, z, 'minecraft:air');
+  const advancePosition = (): void => {
+    if (isFirstPosition) {
+      isFirstPosition = false;
+      return;
+    }
+
+    if (dirX === 1) {
+      if (curX < maxLaneX) {
+        curX++;
+      } else {
+        // Reached East boundary: turn south into next lane
+        const oldZ = getLaneZ(laneIndex);
+        laneIndex++;
+        const newZ = getLaneZ(laneIndex);
+        dirX = -1;
+        curX = maxLaneX;
+
+        // Place continuous redstone wire at X = turnEastX from oldZ to newZ
+        for (let z = oldZ; z <= newZ; z++) {
+          setBlock(turnEastX, 1, z, 'minecraft:redstone_wire[power=0]');
+          setBlock(turnEastX, 0, z, 'minecraft:stone');
+          setBlock(turnEastX, 2, z, 'minecraft:air');
+        }
+      }
+    } else {
+      if (curX > minLaneX) {
+        curX--;
+      } else {
+        // Reached West boundary: turn south into next lane
+        const oldZ = getLaneZ(laneIndex);
+        laneIndex++;
+        const newZ = getLaneZ(laneIndex);
+        dirX = 1;
+        curX = minLaneX;
+
+        // Place continuous redstone wire at X = turnWestX from oldZ to newZ
+        for (let z = oldZ; z <= newZ; z++) {
+          setBlock(turnWestX, 1, z, 'minecraft:redstone_wire[power=0]');
+          setBlock(turnWestX, 0, z, 'minecraft:stone');
+          setBlock(turnWestX, 2, z, 'minecraft:air');
+        }
       }
     }
   };
@@ -94,14 +132,14 @@ export function buildCircuitGrid(
     const events = song.eventsByTick.get(tick) ?? [];
 
     // Delay handling before this tick
-    if (i > 0) {
-      const deltaTicks = tick - prevTick;
+    const deltaTicks = tick - prevTick;
+    if (deltaTicks > 0) {
       const repeaterDelays = decomposeRepeaterDelay(deltaTicks);
 
       for (const delay of repeaterDelays) {
         advancePosition();
         const z = getLaneZ(laneIndex);
-        const facing: RepeaterFacing = dirX === 1 ? 'west' : 'east';
+        const facing: RepeaterFacing = dirX === 1 ? 'east' : 'west';
 
         setBlock(
           curX,
@@ -117,9 +155,7 @@ export function buildCircuitGrid(
 
     // Now place note blocks for this tick
     if (events.length > 0) {
-      if (i > 0 || prevTick !== tick) {
-        advancePosition();
-      }
+      advancePosition();
 
       const centerZ = getLaneZ(laneIndex);
 

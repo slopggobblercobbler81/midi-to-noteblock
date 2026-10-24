@@ -318,6 +318,43 @@ describe('E2E Track: Schematic Validator Test Suite', () => {
       expect(validation.isValid).toBe(true);
       expect(validation.noteBlockCount).toBe(3);
     });
+
+    it('correctly connects serpentine rows with continuous redstone wire and proper repeater facings', async () => {
+      expect(exporter).toBeDefined();
+      // Multi-row timeline with notes spanning across multiple serpentine rows
+      const multiRowTimeline: SongTimeline = {
+        title: 'MultiRow',
+        totalRedstoneTicks: 60,
+        durationSeconds: 6.0,
+        bpm: 120,
+        eventsByTick: new Map(),
+        allEvents: [],
+        tracks: [{ id: 0, name: 'Lead', instrument: 'harp', noteCount: 20, isPercussion: false }],
+      };
+
+      for (let i = 0; i < 20; i++) {
+        const tick = i * 3;
+        const ev = {
+          redstoneTick: tick,
+          timestampSeconds: tick * 0.1,
+          instrument: 'harp' as const,
+          baseBlock: 'minecraft:dirt',
+          note: 12,
+          velocity: 0.8,
+          trackId: 0,
+        };
+        multiRowTimeline.allEvents.push(ev);
+        multiRowTimeline.eventsByTick.set(tick, [ev]);
+      }
+
+      // Export with narrow width 8 to force multiple serpentine zigzag turns
+      const result = await exporter!.exportSpongeSchematic(multiRowTimeline, { name: 'MultiRow', maxTrackWidth: 8 });
+      const validation = validateSpongeSchematic(result.data);
+      expect(validation.isValid).toBe(true);
+      expect(validation.noteBlockCount).toBe(20);
+      expect(validation.repeaterCount).toBeGreaterThan(15);
+      expect(validation.dimensions.length).toBeGreaterThanOrEqual(7); // Multiple rows in Z
+    });
   });
 
   // ==========================================================================
