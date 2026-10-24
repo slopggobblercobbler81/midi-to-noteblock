@@ -3,10 +3,11 @@
  *
  * In-Browser Web Audio Preview Synthesizer & Transport Engine.
  * Simulates vanilla Minecraft note block timbres across all 16 instruments
- * using accurate physical synthesis (oscillators, noise buffers, and filter envelopes)
+ * using physical synthesis (oscillators, noise buffers, and filter envelopes)
  * synchronized with high-precision AudioContext scheduling.
  *
- * Runs 100% client-side with zero external audio assets.
+ * Features immediate audio cutoff upon pause/stop, dynamic speed/volume scaling,
+ * and track-level solo/mute filtering.
  */
 
 import {
@@ -21,6 +22,12 @@ import {
 
 // Standard F#4 frequency (pitch = 12)
 const BASE_F_SHARP_4 = 369.994;
+
+interface StoppableNode {
+  stop?: (when?: number) => void;
+  disconnect?: () => void;
+  onended?: ((this: any, ev: any) => any) | null;
+}
 
 export class WebAudioNoteBlockPlayer implements AudioPlayer {
   private ctx: AudioContext | null = null;
@@ -40,7 +47,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
   };
 
   private masterGain: GainNode | null = null;
-  private scheduledEvents: number[] = [];
+  private scheduledEvents: any[] = [];
+  private activeNodes = new Set<StoppableNode>();
   private playbackStartTime = 0;
   private pauseOffset = 0;
   private tickInterval: any = null;
@@ -107,6 +115,17 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     this.state.isPaused = false;
 
     if (this.ctx) {
+      if (this.ctx.state === 'suspended') {
+        await this.ctx.resume().catch(() => {});
+      }
+      if (this.masterGain) {
+        try {
+          this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.masterGain.gain.setValueAtTime(this.state.volume, this.ctx.currentTime);
+        } catch {
+          // Ignore automation errors
+        }
+      }
       this.playbackStartTime = this.ctx.currentTime - (this.pauseOffset / this.state.playbackSpeed);
       this.schedulePlaybackFrom(this.pauseOffset);
     }
@@ -127,6 +146,17 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
         0,
         (this.ctx.currentTime - this.playbackStartTime) * this.state.playbackSpeed
       );
+
+      // Immediately silence output
+      if (this.masterGain) {
+        try {
+          this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        } catch {
+          // Ignore automation errors
+        }
+      }
+      this.ctx.suspend().catch(() => {});
     }
 
     this.cancelScheduledEvents();
@@ -141,6 +171,18 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     this.state.currentTime = 0;
     this.state.currentRedstoneTick = 0;
     this.pauseOffset = 0;
+
+    if (this.ctx) {
+      if (this.masterGain) {
+        try {
+          this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        } catch {
+          // Ignore automation errors
+        }
+      }
+      this.ctx.suspend().catch(() => {});
+    }
 
     this.cancelScheduledEvents();
     this.stopTickTimer();
@@ -173,7 +215,7 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
   public setVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1.0, volume));
     this.state.volume = clamped;
-    if (this.masterGain && this.ctx) {
+    if (this.masterGain && this.ctx && this.state.isPlaying) {
       this.masterGain.gain.setValueAtTime(clamped, this.ctx.currentTime);
     }
   }
@@ -238,15 +280,45 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     }
   }
 
+  private registerNode(node: StoppableNode): void {
+    this.activeNodes.add(node);
+    try {
+      node.onended = () => {
+        this.activeNodes.delete(node);
+      };
+    } catch {
+      // Ignore if onended cannot be bound
+    }
+  }
+
+  private stopActiveNodes(): void {
+    for (const node of this.activeNodes) {
+      try {
+        if (typeof node.stop === 'function') {
+          node.stop();
+        }
+        if (typeof node.disconnect === 'function') {
+          node.disconnect();
+        }
+      } catch {
+        // Ignored if already terminated
+      }
+    }
+    this.activeNodes.clear();
+  }
+
   private cancelScheduledEvents(): void {
     for (const timerId of this.scheduledEvents) {
-      window.clearTimeout(timerId);
+      clearTimeout(timerId);
     }
     this.scheduledEvents = [];
+    this.stopActiveNodes();
   }
 
   private schedulePlaybackFrom(fromSeconds: number): void {
     if (!this.song || !this.ctx) return;
+
+    this.stopActiveNodes();
 
     const events = this.song.allEvents;
     const now = this.ctx.currentTime;
@@ -265,7 +337,7 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     // Schedule song end
     const remainingSongSeconds = Math.max(0, this.state.duration - fromSeconds);
-    const endTimerId = window.setTimeout(() => {
+    const endTimerId = setTimeout(() => {
       if (this.state.isPlaying) {
         this.stop();
         for (const cb of this.endedCallbacks) cb();
@@ -359,6 +431,9 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     osc2.start(time);
     osc.stop(time + 0.65);
     osc2.stop(time + 0.65);
+
+    this.registerNode(osc);
+    this.registerNode(osc2);
   }
 
   private synthBass(time: number, freq: number, vol: number): void {
@@ -377,6 +452,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.55);
+
+    this.registerNode(osc);
   }
 
   private synthKick(time: number, vol: number): void {
@@ -395,6 +472,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.16);
+
+    this.registerNode(osc);
   }
 
   private synthSnare(time: number, vol: number): void {
@@ -416,6 +495,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     noise.start(time);
     noise.stop(time + 0.14);
+
+    this.registerNode(noise);
   }
 
   private synthHat(time: number, vol: number): void {
@@ -437,6 +518,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     noise.start(time);
     noise.stop(time + 0.05);
+
+    this.registerNode(noise);
   }
 
   private synthFlute(time: number, freq: number, vol: number): void {
@@ -456,6 +539,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.52);
+
+    this.registerNode(osc);
   }
 
   private synthBell(time: number, freq: number, vol: number): void {
@@ -481,6 +566,9 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     osc2.start(time);
     osc1.stop(time + 0.85);
     osc2.stop(time + 0.85);
+
+    this.registerNode(osc1);
+    this.registerNode(osc2);
   }
 
   private synthPluck(time: number, freq: number, type: OscillatorType, vol: number): void {
@@ -505,6 +593,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.5);
+
+    this.registerNode(osc);
   }
 
   private synthXylophone(time: number, freq: number, vol: number): void {
@@ -523,6 +613,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.28);
+
+    this.registerNode(osc);
   }
 
   private synthCowbell(time: number, freq: number, vol: number): void {
@@ -553,6 +645,9 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
     osc2.start(time);
     osc1.stop(time + 0.32);
     osc2.stop(time + 0.32);
+
+    this.registerNode(osc1);
+    this.registerNode(osc2);
   }
 
   private synthChiptune(time: number, freq: number, vol: number): void {
@@ -571,6 +666,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.32);
+
+    this.registerNode(osc);
   }
 
   private synthDidgeridoo(time: number, freq: number, vol: number): void {
@@ -595,6 +692,8 @@ export class WebAudioNoteBlockPlayer implements AudioPlayer {
 
     osc.start(time);
     osc.stop(time + 0.55);
+
+    this.registerNode(osc);
   }
 
   // --- Transport Tick Loop ---

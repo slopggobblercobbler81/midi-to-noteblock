@@ -1,9 +1,9 @@
 /**
  * src/main.ts
  *
- * Full-featured Web Application Client for MIDI to Minecraft Note Block Converter.
- * Provides interactive file drag & drop, audio preview transport, live piano roll visualizer,
- * track-level instrument inspector, and one-click Sponge (.schem) & Litematica (.litematic) downloads.
+ * Client-Side Web Application for MIDI to Minecraft Note Block Converter.
+ * Provides interactive file drop, Web Audio preview with live visualizer,
+ * track-level instrument inspector, and Sponge (.schem) & Litematica (.litematic) exports.
  */
 
 import './style.css';
@@ -21,7 +21,7 @@ import {
   type AudioPlayerState,
 } from './core/types';
 
-export const APP_TITLE = 'MIDI to Minecraft Note Block Converter';
+export const APP_TITLE = 'MIDI to Note Block';
 export const APP_VERSION = '1.0.0';
 
 // Global Application State
@@ -111,10 +111,11 @@ function setupVisualizer(canvas: HTMLCanvasElement): void {
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-    // Draw background grid lines
-    ctx.strokeStyle = '#1e242c';
+    // Subtle pitch grid lines (semitones 0, 6, 12, 18, 24)
+    ctx.strokeStyle = '#22252c';
     ctx.lineWidth = 1;
-    for (let y = 0; y < height; y += 20) {
+    for (let semitone = 0; semitone <= 24; semitone += 6) {
+      const y = height - (semitone / 24) * (height - 16) - 8;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
@@ -122,10 +123,10 @@ function setupVisualizer(canvas: HTMLCanvasElement): void {
     }
 
     if (!currentTimeline || currentTimeline.allEvents.length === 0) {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '13px sans-serif';
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Load a MIDI file to preview notes', width / 2, height / 2);
+      ctx.fillText('Select or drop a MIDI file to preview notes', width / 2, height / 2);
       requestAnimationFrame(render);
       return;
     }
@@ -133,9 +134,9 @@ function setupVisualizer(canvas: HTMLCanvasElement): void {
     const playerState = audioPlayer.getState();
     const playheadTime = playerState.currentTime;
 
-    // Window around current time: 6 seconds total
+    // View window: 6 seconds total
     const windowSeconds = 6;
-    const startTime = Math.max(0, playheadTime - 1.0);
+    const startTime = Math.max(0, playheadTime - 0.8);
     const endTime = startTime + windowSeconds;
 
     // Draw notes
@@ -143,24 +144,20 @@ function setupVisualizer(canvas: HTMLCanvasElement): void {
       if (ev.timestampSeconds < startTime || ev.timestampSeconds > endTime) continue;
 
       const x = ((ev.timestampSeconds - startTime) / windowSeconds) * width;
-      // Invert Y: higher note index -> higher up
       const y = height - (ev.note / 24) * (height - 16) - 8;
 
-      const isCurrent = Math.abs(ev.timestampSeconds - playheadTime) < 0.12;
-      ctx.fillStyle = isCurrent ? '#22c55e' : '#3b82f6';
-      ctx.shadowColor = isCurrent ? '#22c55e' : 'transparent';
-      ctx.shadowBlur = isCurrent ? 8 : 0;
+      const isCurrent = Math.abs(ev.timestampSeconds - playheadTime) < 0.1;
+      ctx.fillStyle = isCurrent ? '#4ade80' : '#38bdf8';
 
       ctx.beginPath();
-      ctx.arc(x, y, isCurrent ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(x, y, isCurrent ? 4.5 : 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
 
-    // Draw Playhead cursor
+    // Playhead line
     const cursorX = ((playheadTime - startTime) / windowSeconds) * width;
     ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(cursorX, 0);
     ctx.lineTo(cursorX, height);
@@ -183,244 +180,246 @@ export function renderApp(): void {
   const state = audioPlayer.getState();
 
   app.innerHTML = `
-    <main class="app-container">
-      <header>
-        <div class="logo-badge">🎵 Minecraft Redstone Audio Converter</div>
-        <h1>${APP_TITLE}</h1>
-        <p class="tagline">Convert any MIDI file into playable Minecraft note block circuits (.schem & .litematic) with in-browser audio preview.</p>
-      </header>
-
-      <!-- 1. Upload & Demo Section -->
-      <section class="card">
-        <div class="card-title">
-          <span>1. Select or Upload MIDI</span>
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Standard .mid / .midi</span>
+    <div class="app-container">
+      <header class="app-header">
+        <div class="brand">
+          <h1>
+            <span class="brand-icon">♪</span>
+            ${APP_TITLE}
+          </h1>
+          <p class="brand-desc">Convert MIDI files into playable Minecraft note block circuits (.schem & .litematic)</p>
         </div>
 
+        <div class="header-links">
+          <a href="//github.com/slopggobblercobbler81/midi-to-noteblock" target="_blank" rel="noreferrer" class="btn btn-subtle btn-sm">
+            GitHub
+          </a>
+        </div>
+      </header>
+
+      <!-- File Upload Zone -->
+      <section class="panel">
         <div id="dropzone" class="dropzone">
-          <div class="dropzone-icon">🎹</div>
-          <div class="dropzone-text">Drag & drop your MIDI file here</div>
-          <div class="dropzone-subtext">or click to browse files from your computer</div>
+          <div class="dropzone-label">Drop a MIDI file here, or click to browse</div>
+          <div class="dropzone-hint">Supports SMF Format 0, 1, and 2 (.mid, .midi)</div>
           <input type="file" id="fileInput" accept=".mid,.midi" style="display: none;" />
         </div>
 
-        <div class="upload-actions">
-          <button id="btnBrowse" class="btn btn-secondary">📁 Browse File</button>
-          <button id="btnDemo" class="btn btn-primary">⚡ Load Demo Song (Takeshi Abo - Lease)</button>
+        <div class="upload-bar">
+          <button id="btnBrowse" class="btn btn-subtle">Choose File</button>
+          <button id="btnDemo" class="btn btn-primary">Load Sample (Takeshi Abo - Lease)</button>
         </div>
       </section>
 
       ${hasSong ? `
-        <!-- 2. Audio Preview Player -->
-        <section class="card">
-          <div class="card-title">
-            <span>2. In-Browser Minecraft Note Block Audio Preview</span>
-            <span style="font-size: 0.85rem; color: var(--accent-green);">16 Vanilla Instruments Synthesizer</span>
+        <!-- Audio Preview & Transport -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Audio Preview</div>
+            <div class="panel-subtitle">Synthesizing 16 Minecraft Instrument Timbre Foundations</div>
           </div>
 
-          <div class="player-container">
-            <div class="visualizer-container">
-              <canvas id="visualizer" width="900" height="140"></canvas>
+          <div class="canvas-wrapper">
+            <canvas id="visualizer" width="940" height="120"></canvas>
+          </div>
+
+          <div class="player-toolbar">
+            <div class="transport-actions">
+              <button id="btnPlayPause" class="btn btn-primary btn-sm">
+                ${state.isPlaying ? '⏸ Pause' : '▶ Play'}
+              </button>
+              <button id="btnStop" class="btn btn-subtle btn-sm">⏹ Stop</button>
             </div>
 
-            <div class="transport-bar">
-              <div class="transport-controls">
-                <button id="btnPlayPause" class="btn ${state.isPlaying ? 'btn-secondary' : 'btn-primary'}">
-                  ${state.isPlaying ? '⏸ Pause' : '▶ Play'}
-                </button>
-                <button id="btnStop" class="btn btn-secondary">⏹ Stop</button>
-              </div>
+            <input
+              type="range"
+              id="seekSlider"
+              class="scrubber"
+              min="0"
+              max="${currentTimeline!.durationSeconds}"
+              step="0.05"
+              value="${state.currentTime}"
+            />
 
+            <div class="time-counter" id="timeDisplay">
+              <strong>${formatTime(state.currentTime)}</strong> / ${formatTime(currentTimeline!.durationSeconds)}
+              <span style="color: var(--text-muted); margin-left: 0.35rem;">(Tick ${state.currentRedstoneTick}/${currentTimeline!.totalRedstoneTicks})</span>
+            </div>
+
+            <div class="control-group">
+              <span>Speed:</span>
+              <select id="speedSelect" class="mini-select">
+                <option value="0.5" ${state.playbackSpeed === 0.5 ? 'selected' : ''}>0.5x</option>
+                <option value="0.75" ${state.playbackSpeed === 0.75 ? 'selected' : ''}>0.75x</option>
+                <option value="1.0" ${state.playbackSpeed === 1.0 ? 'selected' : ''}>1.0x</option>
+                <option value="1.25" ${state.playbackSpeed === 1.25 ? 'selected' : ''}>1.25x</option>
+                <option value="1.5" ${state.playbackSpeed === 1.5 ? 'selected' : ''}>1.5x</option>
+                <option value="2.0" ${state.playbackSpeed === 2.0 ? 'selected' : ''}>2.0x</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <span>Vol:</span>
               <input
                 type="range"
-                id="seekSlider"
-                class="seek-slider"
+                id="volumeSlider"
+                class="mini-slider"
                 min="0"
-                max="${currentTimeline!.durationSeconds}"
+                max="1"
                 step="0.05"
-                value="${state.currentTime}"
+                value="${state.volume}"
               />
-
-              <div class="time-display" id="timeDisplay">
-                ${formatTime(state.currentTime)} / ${formatTime(currentTimeline!.durationSeconds)}
-                <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Tick: ${state.currentRedstoneTick} / ${currentTimeline!.totalRedstoneTicks}</span>
-              </div>
-
-              <div class="speed-container">
-                <span>Speed:</span>
-                <select id="speedSelect" class="inst-select">
-                  <option value="0.5" ${state.playbackSpeed === 0.5 ? 'selected' : ''}>0.5x</option>
-                  <option value="0.75" ${state.playbackSpeed === 0.75 ? 'selected' : ''}>0.75x</option>
-                  <option value="1.0" ${state.playbackSpeed === 1.0 ? 'selected' : ''}>1.0x (Normal)</option>
-                  <option value="1.25" ${state.playbackSpeed === 1.25 ? 'selected' : ''}>1.25x</option>
-                  <option value="1.5" ${state.playbackSpeed === 1.5 ? 'selected' : ''}>1.5x</option>
-                  <option value="2.0" ${state.playbackSpeed === 2.0 ? 'selected' : ''}>2.0x</option>
-                </select>
-              </div>
-
-              <div class="volume-container">
-                <span>Vol:</span>
-                <input
-                  type="range"
-                  id="volumeSlider"
-                  class="volume-slider"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value="${state.volume}"
-                />
-              </div>
             </div>
           </div>
         </section>
 
-        <!-- 3. Conversion Settings & Track Inspector -->
-        <section class="card">
-          <div class="card-title">
-            <span>3. Tuning & Conversion Settings</span>
-            <span style="font-size: 0.85rem; color: var(--text-muted);">${currentTimeline!.tracks.length} Tracks Detected</span>
-          </div>
-
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="setting-label">Transposition (Semitones)</label>
-              <input
-                type="number"
-                id="transposeInput"
-                class="setting-input"
-                min="-24"
-                max="24"
-                value="${conversionOptions.manualTranspose ?? 0}"
-              />
+        <!-- Tuning & Track Inspector -->
+        <div class="workspace-grid">
+          <section class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Tuning & Circuit Layout</div>
             </div>
 
-            <div class="setting-item">
-              <label class="setting-label">Max Circuit Width (Blocks)</label>
-              <input
-                type="number"
-                id="widthInput"
-                class="setting-input"
-                min="5"
-                max="32"
-                value="${maxTrackWidth}"
-              />
-            </div>
+            <div class="settings-stack">
+              <div class="setting-row">
+                <label for="transposeInput">Pitch Transposition (semitones)</label>
+                <input
+                  type="number"
+                  id="transposeInput"
+                  min="-24"
+                  max="24"
+                  value="${conversionOptions.manualTranspose ?? 0}"
+                />
+              </div>
 
-            <div class="setting-item">
-              <label class="setting-checkbox">
+              <div class="setting-row">
+                <label for="widthInput">Max Track Width (blocks)</label>
+                <input
+                  type="number"
+                  id="widthInput"
+                  min="5"
+                  max="32"
+                  value="${maxTrackWidth}"
+                />
+              </div>
+
+              <label class="checkbox-row">
                 <input
                   type="checkbox"
                   id="preserveKeyCheck"
                   ${conversionOptions.preserveKey ? 'checked' : ''}
                 />
-                <span>Preserve Musical Key (Octaves Only)</span>
+                <span>Preserve key (octave shifts only)</span>
               </label>
 
-              <label class="setting-checkbox">
+              <label class="checkbox-row">
                 <input
                   type="checkbox"
                   id="octaveFoldCheck"
                   ${conversionOptions.enableOctaveFolding !== false ? 'checked' : ''}
                 />
-                <span>Enable Octave Folding into [0, 24]</span>
+                <span>Fold out-of-range notes into [0, 24]</span>
               </label>
             </div>
-          </div>
+          </section>
 
-          <h4 style="margin-top: 1rem; font-size: 0.95rem;">Track Instruments & Mute/Solo:</h4>
-          <div class="track-list">
-            ${currentTimeline!.tracks.map((track) => `
-              <div class="track-row" data-track-id="${track.id}">
-                <div class="track-info">
-                  <span class="track-name">${track.name}</span>
-                  <span class="track-badge">${track.noteCount} notes</span>
-                  ${track.isPercussion ? '<span class="track-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">Percussion</span>' : ''}
+          <section class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Track Inspector</div>
+              <div class="panel-subtitle">${currentTimeline!.tracks.length} tracks detected</div>
+            </div>
+
+            <div class="track-table">
+              ${currentTimeline!.tracks.map((track) => `
+                <div class="track-item" data-track-id="${track.id}">
+                  <div class="track-meta">
+                    <span class="track-title">${track.name}</span>
+                    <span class="track-count">${track.noteCount} notes</span>
+                    ${track.isPercussion ? '<span class="badge-drum">Drums</span>' : ''}
+                  </div>
+
+                  <div class="track-tools">
+                    <select class="mini-select track-inst-select" data-track-id="${track.id}">
+                      ${MINECRAFT_INSTRUMENTS.map((inst) => `
+                        <option value="${inst}" ${track.instrument === inst ? 'selected' : ''}>${inst}</option>
+                      `).join('')}
+                    </select>
+
+                    <button
+                      class="toggle-btn track-mute ${state.mutedTracks.has(track.id) ? 'is-muted' : ''}"
+                      data-track-id="${track.id}"
+                      title="Mute Track"
+                    >M</button>
+
+                    <button
+                      class="toggle-btn track-solo ${state.soloTracks.has(track.id) ? 'is-soloed' : ''}"
+                      data-track-id="${track.id}"
+                      title="Solo Track"
+                    >S</button>
+                  </div>
                 </div>
+              `).join('')}
+            </div>
+          </section>
+        </div>
 
-                <div class="track-actions">
-                  <select class="inst-select track-inst-select" data-track-id="${track.id}">
-                    ${MINECRAFT_INSTRUMENTS.map((inst) => `
-                      <option value="${inst}" ${track.instrument === inst ? 'selected' : ''}>${inst}</option>
-                    `).join('')}
-                  </select>
-
-                  <button
-                    class="btn-toggle track-mute ${state.mutedTracks.has(track.id) ? 'active-mute' : ''}"
-                    data-track-id="${track.id}"
-                    title="Mute Track"
-                  >M</button>
-
-                  <button
-                    class="btn-toggle track-solo ${state.soloTracks.has(track.id) ? 'active-solo' : ''}"
-                    data-track-id="${track.id}"
-                    title="Solo Track"
-                  >S</button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </section>
-
-        <!-- 4. Schematic Export & Statistics -->
-        <section class="card">
-          <div class="card-title">
-            <span>4. Schematic Export & Circuit Statistics</span>
-            <span style="font-size: 0.85rem; color: var(--accent-green);">Ready to Export</span>
+        <!-- Export Section -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Export Minecraft Schematics</div>
+            <div class="panel-subtitle">${currentTimeline!.title}</div>
           </div>
 
-          <div class="stats-grid">
-            <div class="stat-box">
-              <div class="stat-val">${currentTimeline!.allEvents.length}</div>
-              <div class="stat-label">Note Blocks</div>
+          <div class="stats-ribbon">
+            <div class="stat-cell">
+              <div class="stat-number">${currentTimeline!.allEvents.length}</div>
+              <div class="stat-desc">Note Blocks</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-val">${currentTimeline!.totalRedstoneTicks}</div>
-              <div class="stat-label">Redstone Ticks</div>
+            <div class="stat-cell">
+              <div class="stat-number">${currentTimeline!.totalRedstoneTicks}</div>
+              <div class="stat-desc">Redstone Ticks</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-val">${currentTimeline!.bpm.toFixed(0)}</div>
-              <div class="stat-label">BPM</div>
+            <div class="stat-cell">
+              <div class="stat-number">${currentTimeline!.bpm.toFixed(0)}</div>
+              <div class="stat-desc">Tempo (BPM)</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-val">${formatTime(currentTimeline!.durationSeconds)}</div>
-              <div class="stat-label">Duration</div>
+            <div class="stat-cell">
+              <div class="stat-number">${formatTime(currentTimeline!.durationSeconds)}</div>
+              <div class="stat-desc">Duration</div>
             </div>
           </div>
 
-          <div class="export-buttons">
+          <div class="export-actions">
             <button id="btnExportSchem" class="btn btn-primary export-btn">
-              📦 Download .schem (WorldEdit / Sponge 1.13+)
+              Download Sponge (.schem) &mdash; WorldEdit 1.13+
             </button>
-            <button id="btnExportLitematic" class="btn btn-accent-blue export-btn">
-              📜 Download .litematic (Litematica 1.12 - 1.20+)
+            <button id="btnExportLitematic" class="btn btn-blue export-btn">
+              Download Litematica (.litematic)
             </button>
           </div>
 
-          <div class="instructions-panel" style="margin-top: 1rem;">
-            <h4>How to load into Minecraft:</h4>
-            <ul>
-              <li><strong>WorldEdit (.schem):</strong> Place in <code>.minecraft/config/worldedit/schematics/</code>. In game, run <code>//schem load &lt;name&gt;</code> and <code>//paste</code>.</li>
-              <li><strong>Litematica (.litematic):</strong> Place in <code>.minecraft/schematics/</code>. In game, press <code>M</code> &rarr; <em>Load Schematics</em> and placement tool.</li>
-              <li><strong>Activation:</strong> Connect a button or redstone lever to the starting input repeater to trigger full in-game musical playback!</li>
-            </ul>
+          <div class="guide-box">
+            <h4>Minecraft Import Guide:</h4>
+            <ol>
+              <li><strong>WorldEdit (.schem):</strong> Put in <code>.minecraft/config/worldedit/schematics/</code>. In game, run <code>//schem load &lt;name&gt;</code> and <code>//paste</code>.</li>
+              <li><strong>Litematica (.litematic):</strong> Put in <code>.minecraft/schematics/</code>. Press <code>M</code> &rarr; <em>Load Schematics</em>.</li>
+              <li><strong>To Play:</strong> Connect a button or redstone lever to the starting input repeater to trigger musical playback!</li>
+            </ol>
           </div>
         </section>
       ` : ''}
 
-      <footer>
+      <footer class="app-footer">
         <p>
-          MIDI to Minecraft Note Block Converter &bull;
-          <a href="//github.com/slopggobblercobbler81/midi-to-noteblock" target="_blank" rel="noreferrer">View on GitHub</a>
-          &bull; 100% Client-Side Web Application
+          MIDI to Note Block &bull; Open-source client-side tool &bull;
+          <a href="//github.com/slopggobblercobbler81/midi-to-noteblock" target="_blank" rel="noreferrer">GitHub Repository</a>
         </p>
       </footer>
-    </main>
+    </div>
   `;
 
-  // Attach Event Listeners
   attachEventListeners();
 
-  // Setup Visualizer Canvas if present
   const canvas = document.getElementById('visualizer') as HTMLCanvasElement | null;
   if (canvas) {
     setupVisualizer(canvas);
@@ -480,17 +479,18 @@ function attachEventListeners(): void {
       const state = audioPlayer.getState();
       if (state.isPlaying) {
         audioPlayer.pause();
+        btnPlayPause.textContent = '▶ Play';
       } else {
         audioPlayer.play();
+        btnPlayPause.textContent = '⏸ Pause';
       }
-      renderApp();
     });
   }
 
   if (btnStop) {
     btnStop.addEventListener('click', () => {
       audioPlayer.stop();
-      renderApp();
+      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
     });
   }
 
@@ -569,7 +569,7 @@ function attachEventListeners(): void {
       const trackId = parseInt(btn.getAttribute('data-track-id')!, 10);
       const isMuted = audioPlayer.getState().mutedTracks.has(trackId);
       audioPlayer.setTrackMute(trackId, !isMuted);
-      renderApp();
+      btn.classList.toggle('is-muted', !isMuted);
     });
   });
 
@@ -579,7 +579,7 @@ function attachEventListeners(): void {
       const trackId = parseInt(btn.getAttribute('data-track-id')!, 10);
       const isSolo = audioPlayer.getState().soloTracks.has(trackId);
       audioPlayer.setTrackSolo(trackId, !isSolo);
-      renderApp();
+      btn.classList.toggle('is-soloed', !isSolo);
     });
   });
 
@@ -615,8 +615,8 @@ audioPlayer.onTick((state: AudioPlayerState) => {
 
   if (timeDisplay && currentTimeline) {
     timeDisplay.innerHTML = `
-      ${formatTime(state.currentTime)} / ${formatTime(currentTimeline.durationSeconds)}
-      <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Tick: ${state.currentRedstoneTick} / ${currentTimeline.totalRedstoneTicks}</span>
+      <strong>${formatTime(state.currentTime)}</strong> / ${formatTime(currentTimeline.durationSeconds)}
+      <span style="color: var(--text-muted); margin-left: 0.35rem;">(Tick ${state.currentRedstoneTick}/${currentTimeline.totalRedstoneTicks})</span>
     `;
   }
 
@@ -626,7 +626,8 @@ audioPlayer.onTick((state: AudioPlayerState) => {
 });
 
 audioPlayer.onEnded(() => {
-  renderApp();
+  const btnPlayPause = document.getElementById('btnPlayPause');
+  if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
 });
 
 // Auto-initialize when loaded in browser
